@@ -1209,3 +1209,27 @@ details {
     grid-template-columns: 190px minmax(0, 1fr);
   }
 }
+.question-generator {
+  margin-top: 24px;
+}
+.article-picker {
+  max-height: 180px;
+  overflow: auto;
+  display: grid;
+  gap: 9px;
+  margin: 16px 0;
+}
+.article-picker label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+.candidate-card {
+  border-top: 1px solid #e2e9e4;
+  padding: 18px 0;
+  line-height: 1.7;
+}
+.candidate-card p {
+  white-space: pre-wrap;
+}

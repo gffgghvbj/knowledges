@@ -58,7 +58,7 @@ export function registerIpc(
       120000,
       new HybridRetriever(repo, retrievalSettings, vectorIndex),
     );
-  registerInterviewIpc(handle, win, repo);
+  registerInterviewIpc(handle, win, repo, settings);
   vectorIndex.watch();
   handle("retrievalConfig", z.tuple([]), () => retrievalSettings.get());
   handle("saveRetrieval", z.tuple([retrievalSettingsSchema]), (input) => {

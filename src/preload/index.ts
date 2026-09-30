@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
 const names = [
+  "interviewQuestions",
+  "saveInterviewQuestion",
+  "deleteInterviewQuestion",
+  "proposeInterviewQuestions",
+  "acceptInterviewQuestions",
   "interviewMaterials",
   "saveInterviewMaterial",
   "deleteInterviewMaterial",

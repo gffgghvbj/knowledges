@@ -1,3 +1,4 @@
+import type { InterviewQuestion, QuestionInput } from "./interview";
 import type { InterviewMaterial, MaterialInput } from "./interview";
 import type {
   RetrievalConfig,
@@ -119,6 +120,15 @@ export interface LibraryState {
   root: string;
 }
 export interface LibraryApi {
+  interviewQuestions(): Promise<InterviewQuestion[]>;
+  saveInterviewQuestion(input: QuestionInput): Promise<InterviewQuestion>;
+  deleteInterviewQuestion(id: string): Promise<void>;
+  proposeInterviewQuestions(
+    ids: string[],
+    count: number,
+    provider: "online" | "ollama",
+  ): Promise<InterviewQuestion[]>;
+  acceptInterviewQuestions(ids: string[]): Promise<InterviewQuestion[]>;
   interviewMaterials(): Promise<InterviewMaterial[]>;
   saveInterviewMaterial(input: MaterialInput): Promise<InterviewMaterial>;
   deleteInterviewMaterial(id: string): Promise<void>;

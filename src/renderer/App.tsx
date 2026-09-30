@@ -1,3 +1,4 @@
+import { QuestionBankPage } from "./QuestionBankPage";
 import { InterviewMaterialsPage } from "./InterviewMaterialsPage";
 import { KnowledgePage } from "./KnowledgePage";
 import { ModelPage } from "./ModelPage";
@@ -58,6 +59,7 @@ export function App() {
             ["library", "▤", "资料库"],
             ["tasks", "⇣", "采集任务"],
             ["qa", "✧", "知识库问答"],
+            ["bank", "▦", "题库"],
             ["materials", "▧", "面试资料"],
             ["models", "⚙", "模型设置"],
             ["backup", "⇄", "备份与迁移"],
@@ -97,6 +99,7 @@ export function App() {
                 {
                   qa: "知识库问答",
                   materials: "面试资料",
+                  bank: "题库",
                   models: "模型设置",
                   sources: "网站来源",
                   library: "资料库",
@@ -122,6 +125,7 @@ export function App() {
               onSettings={() => setView("models")}
             />
           )}
+          {view === "bank" && <QuestionBankPage run={run} state={state} />}
           {view === "materials" && <InterviewMaterialsPage run={run} />}
           {view === "models" && <ModelPage run={run} state={state} />}
           {view === "sources" && (
