@@ -12,7 +12,7 @@ import type {
 } from "../../shared/contracts";
 import { atomicWrite, hash, normalizeUrl, safePath } from "./files";
 import { indexKnowledge } from "../knowledge/index";
-import type { QaRecord } from "../../shared/knowledge";
+import { categoryNameSchema, type QaRecord } from "../../shared/knowledge";
 import { migrate } from "./schema";
 
 export class LibraryRepository {
@@ -48,7 +48,7 @@ export class LibraryRepository {
       .map((row) => JSON.parse(row.data as string));
   }
   private get<T>(
-    table: "sources" | "articles" | "versions" | "tasks",
+    table: "sources" | "articles" | "versions" | "tasks" | "qa_records",
     id: string,
   ): T | undefined {
     const row = this.db.prepare(`SELECT data FROM ${table} WHERE id=?`).get(id);
@@ -257,6 +257,61 @@ export class LibraryRepository {
     this.db
       .prepare("INSERT OR REPLACE INTO qa_records VALUES (?,?)")
       .run(record.id, JSON.stringify(record));
+  }
+  updateQaGeneration(record: QaRecord) {
+    const existing = this.get<QaRecord>("qa_records", record.id);
+    if (existing) this.putQa({ ...record, category: existing.category });
+  }
+  deleteQa(ids: string[]) {
+    this.transaction(() => {
+      const statement = this.db.prepare("DELETE FROM qa_records WHERE id=?");
+      for (const id of new Set(ids)) statement.run(id);
+    });
+  }
+  listQaCategories(): string[] {
+    return this.db
+      .prepare("SELECT name FROM qa_categories ORDER BY name")
+      .all()
+      .map((row) => row.name as string);
+  }
+  createQaCategory(raw: string) {
+    const name = categoryNameSchema.parse(raw);
+    if (this.listQaCategories().includes(name)) throw Error("分类名称已存在");
+    this.db.prepare("INSERT INTO qa_categories VALUES (?)").run(name);
+    return name;
+  }
+  moveQa(ids: string[], category: string | null) {
+    if (category !== null && !this.listQaCategories().includes(category))
+      throw Error("分类不存在，请刷新后重试");
+    const selected = new Set(ids);
+    this.transaction(() => {
+      for (const record of this.listQa())
+        if (selected.has(record.id))
+          this.putQa({ ...record, category: category ?? undefined });
+    });
+  }
+  renameQaCategory(old: string, raw: string) {
+    const name = categoryNameSchema.parse(raw),
+      categories = this.listQaCategories();
+    if (!categories.includes(old)) throw Error("分类不存在");
+    if (old === name) return name;
+    if (categories.includes(name)) throw Error("分类名称已存在");
+    this.transaction(() => {
+      this.db
+        .prepare("UPDATE qa_categories SET name=? WHERE name=?")
+        .run(name, old);
+      for (const record of this.listQa())
+        if (record.category === old) this.putQa({ ...record, category: name });
+    });
+    return name;
+  }
+  deleteQaCategory(name: string) {
+    this.transaction(() => {
+      for (const record of this.listQa())
+        if (record.category === name)
+          this.putQa({ ...record, category: undefined });
+      this.db.prepare("DELETE FROM qa_categories WHERE name=?").run(name);
+    });
   }
   listQa(): QaRecord[] {
     return this.db

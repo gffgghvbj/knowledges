@@ -98,7 +98,12 @@ export async function validateBackup(
       throw Error("备份包含未声明文件");
     validateRelations(manifest, expected);
     const qaIds = new Set<string>();
+    const categories = new Set(manifest.qaCategories);
+    if (categories.size !== manifest.qaCategories.length)
+      throw Error("备份分类重复");
     for (const record of manifest.qaRecords) {
+      if (record.category && !categories.has(record.category))
+        throw Error("问答分类不存在");
       if (qaIds.has(record.id)) throw Error("问答标识重复");
       qaIds.add(record.id);
       const ids = new Set(record.evidence.map((e) => e.id));

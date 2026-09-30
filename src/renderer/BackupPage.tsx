@@ -35,8 +35,8 @@ export function BackupPage({
           <div className="empty-icon">↗</div>
           <h3>导出资料库</h3>
           <p>
-            包含文章、图片、历史版本和问答记录。网站登录状态、模型设置和 API Key
-            不会放入备份。
+            包含文章、图片、历史版本、问答记录和分类。网站登录状态、模型设置和
+            API Key 不会放入备份。
           </p>
           <button
             className="primary"
@@ -55,7 +55,9 @@ export function BackupPage({
         <section className="source-card">
           <div className="empty-icon">↙</div>
           <h3>合并导入</h3>
-          <p>保留两边新增的资料，重复内容去重，旧版本依然可以恢复。</p>
+          <p>
+            保留两边新增的资料，同名分类合并。重新导入旧备份也会恢复其中已在本机删除的问答。
+          </p>
           <button
             disabled={busy}
             onClick={() =>

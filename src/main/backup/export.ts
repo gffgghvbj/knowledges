@@ -22,7 +22,8 @@ export async function exportLibrary(
       ),
     ];
   const manifest: Manifest = {
-    formatVersion: 2,
+    formatVersion: 3,
+    qaCategories: repo.listQaCategories(),
     qaRecords: repo.listQa(),
     createdAt: new Date().toISOString(),
     sources: repo.listSources(),

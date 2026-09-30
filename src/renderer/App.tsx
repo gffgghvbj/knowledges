@@ -82,7 +82,7 @@ export function App() {
           </p>
         </div>
         <div className="sidebar-bottom">
-          <span className="status-dot" /> 本地资料库 <small>v0.3</small>
+          <span className="status-dot" /> 本地资料库 <small>v0.4</small>
           <p>资料属于你，随时可以带走。</p>
         </div>
       </aside>

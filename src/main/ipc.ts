@@ -6,7 +6,11 @@ import { retrievalSettingsSchema } from "../shared/retrieval";
 import { ModelSettings } from "./knowledge/settings";
 import { QaService } from "./knowledge/service";
 import { requestModel } from "./knowledge/model";
-import { profileSchema, scopeSchema } from "../shared/knowledge";
+import {
+  profileSchema,
+  scopeSchema,
+  categoryNameSchema,
+} from "../shared/knowledge";
 import {
   ipcMain,
   dialog,
@@ -126,6 +130,25 @@ export function registerIpc(
       qa.ask(question, scope, provider, supplement),
   );
   handle("qaHistory", z.tuple([]), () => repo.listQa());
+  handle("qaCategories", z.tuple([]), () => repo.listQaCategories());
+  handle("createQaCategory", z.tuple([categoryNameSchema]), (name) =>
+    repo.createQaCategory(name),
+  );
+  handle(
+    "renameQaCategory",
+    z.tuple([categoryNameSchema, categoryNameSchema]),
+    (old, name) => repo.renameQaCategory(old, name),
+  );
+  handle("deleteQaCategory", z.tuple([categoryNameSchema]), (name) =>
+    repo.deleteQaCategory(name),
+  );
+  const qaIds = z.array(id).min(1).max(100000);
+  handle(
+    "moveQa",
+    z.tuple([qaIds, categoryNameSchema.nullable()]),
+    (ids, category) => repo.moveQa(ids, category),
+  );
+  handle("deleteQa", z.tuple([qaIds]), (ids) => qa.delete(ids));
   handle("cancelQa", z.tuple([id]), (id) => qa.cancel(id));
   handle("getStatus", z.tuple([]), () => ({ ready: true }));
   handle("state", z.tuple([]), () => ({

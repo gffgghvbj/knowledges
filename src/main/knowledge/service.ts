@@ -92,7 +92,8 @@ export class QaService {
         );
         record.evidence = result.evidence;
         record.retrieval = result.trace;
-        this.repo.putQa(record);
+        controller.signal.throwIfAborted();
+        this.repo.updateQaGeneration(record);
       }
       if (!record.evidence.length && !record.allowSupplement) {
         record.answer = { paragraphs: [], insufficient: true, supplement: "" };
@@ -133,7 +134,7 @@ export class QaService {
       }
     } finally {
       clearTimeout(timer);
-      this.repo.putQa(record);
+      this.repo.updateQaGeneration(record);
     }
   }
   cancel(id: string) {
@@ -146,6 +147,10 @@ export class QaService {
       this.repo.putQa(record);
     }
     running.controller.abort("user-cancel");
+  }
+  delete(ids: string[]) {
+    for (const id of ids) this.running.get(id)?.controller.abort("user-cancel");
+    this.repo.deleteQa(ids);
   }
   async waitForIdle() {
     await Promise.all([...this.running.values()].map((v) => v.promise));

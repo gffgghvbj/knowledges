@@ -4,12 +4,7 @@ import type { QaRecord, Evidence } from "../shared/knowledge";
 import type { Run } from "./App";
 import { api } from "./api";
 import { Reader } from "./components/Reader";
-const statusText = {
-  pending: "正在检索与生成…",
-  complete: "已完成",
-  failed: "生成失败",
-  cancelled: "已取消",
-};
+import { QaHistory } from "./QaHistory";
 export function KnowledgePage({
   state,
   run,
@@ -101,30 +96,15 @@ export function KnowledgePage({
         <button onClick={onSettings}>模型设置 ↗</button>
       </div>
       <div className="qa-layout">
-        <aside className="qa-history">
-          <div className="section-heading">
-            <h3>提问记录</h3>
-            <button onClick={() => setSelected("")}>新问题</button>
-          </div>
-          {!history.length && (
-            <p className="list-empty">你的问题和答案会保存在这里。</p>
-          )}
-          {history.map((r) => (
-            <button
-              key={r.id}
-              className={
-                selected === r.id ? "article-item active" : "article-item"
-              }
-              onClick={() => setSelected(r.id)}
-            >
-              <strong>{r.question}</strong>
-              <small>
-                {new Date(r.createdAt).toLocaleString()} ·{" "}
-                {statusText[r.status]}
-              </small>
-            </button>
-          ))}
-        </aside>
+        <QaHistory
+          history={history}
+          selected={selected}
+          onSelect={setSelected}
+          run={run}
+          onChanged={async () => {
+            setHistory(await api.qaHistory());
+          }}
+        />
         <section className="qa-main">
           {current ? (
             <div className="qa-answer">

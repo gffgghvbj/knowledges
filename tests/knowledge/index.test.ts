@@ -69,11 +69,11 @@ test("第一版 SQLite 自动升级，原文与版本保持不变", () => {
     );
     // Remove only phase-two schema additions to recreate the actual v1 schema.
     repo.db.exec(
-      "DROP TABLE knowledge_chunks; DROP TABLE qa_records; DROP TABLE vector_embeddings; DROP TABLE vector_control; PRAGMA user_version=1;",
+      "DROP TABLE knowledge_chunks; DROP TABLE qa_records; DROP TABLE qa_categories; DROP TABLE vector_embeddings; DROP TABLE vector_control; PRAGMA user_version=1;",
     );
     repo.close();
     repo = new LibraryRepository(root);
-    expect(repo.db.prepare("PRAGMA user_version").get()?.user_version).toBe(3);
+    expect(repo.db.prepare("PRAGMA user_version").get()?.user_version).toBe(4);
     expect(repo.readArticle(v.articleId, v.id).markdown).toBe("AOF 追加日志。");
     expect(retrieve(repo, "AOF", {})[0].versionId).toBe(v.id);
     expect(repo.listQa()).toEqual([]);

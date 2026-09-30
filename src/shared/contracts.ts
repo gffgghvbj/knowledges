@@ -132,6 +132,12 @@ export interface LibraryApi {
     allowSupplement: boolean,
   ): Promise<string>;
   qaHistory(): Promise<QaRecord[]>;
+  qaCategories(): Promise<string[]>;
+  createQaCategory(name: string): Promise<string>;
+  renameQaCategory(old: string, name: string): Promise<string>;
+  deleteQaCategory(name: string): Promise<void>;
+  moveQa(ids: string[], category: string | null): Promise<void>;
+  deleteQa(ids: string[]): Promise<void>;
   cancelQa(id: string): Promise<void>;
   getStatus(): Promise<{ ready: boolean }>;
   state(): Promise<LibraryState>;

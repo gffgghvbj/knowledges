@@ -44,6 +44,11 @@ export async function importBackup(
           readFileSync(safePath(backup.root, f.path)),
         );
     repo.transaction(() => {
+      const categories = new Set(repo.listQaCategories());
+      for (const name of m.qaCategories) {
+        if (!categories.has(name)) repo.createQaCategory(name);
+        categories.add(name);
+      }
       for (const s of m.sources) if (!repo.getSource(s.id)) repo.putSource(s);
       const previousCurrent = new Map(
         repo
