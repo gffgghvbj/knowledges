@@ -82,7 +82,7 @@ export function App() {
           </p>
         </div>
         <div className="sidebar-bottom">
-          <span className="status-dot" /> 本地资料库 <small>v0.2</small>
+          <span className="status-dot" /> 本地资料库 <small>v0.3</small>
           <p>资料属于你，随时可以带走。</p>
         </div>
       </aside>
@@ -119,7 +119,7 @@ export function App() {
               onSettings={() => setView("models")}
             />
           )}
-          {view === "models" && <ModelPage run={run} />}
+          {view === "models" && <ModelPage run={run} state={state} />}
           {view === "sources" && (
             <SourcePage
               state={state}

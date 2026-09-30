@@ -1,8 +1,10 @@
+import { RetrievalPanel } from "./RetrievalPanel";
+import type { LibraryState } from "../shared/contracts";
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import type { ModelProfile } from "../shared/knowledge";
 import type { Run } from "./App";
-export function ModelPage({ run }: { run: Run }) {
+export function ModelPage({ run, state }: { run: Run; state: LibraryState }) {
   const [profiles, setProfiles] = useState<ModelProfile[]>([]),
     [provider, setProvider] = useState<"online" | "ollama">("online"),
     [baseUrl, setBaseUrl] = useState(""),
@@ -162,6 +164,7 @@ export function ModelPage({ run }: { run: Run }) {
           费用。
         </p>
       </section>
+      <RetrievalPanel run={run} status={state.vectorIndex} />
       <div className="info-note">
         <b>资料怎样交给模型？</b>
         <p>

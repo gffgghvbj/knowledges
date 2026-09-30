@@ -60,10 +60,11 @@ export function terms(text: string): string[] {
     ),
   ].slice(0, 40);
 }
-export function retrieve(
+export function keywordCandidates(
   repo: LibraryRepository,
   question: string,
   scope: QaScope,
+  limit = 24,
 ): Evidence[] {
   const query = terms(question);
   if (!query.length) return [];
@@ -85,6 +86,7 @@ export function retrieve(
       const a = articles.get(c.articleId);
       return (
         a &&
+        c.quote.length <= MAX_CONTEXT_CHARS &&
         a.currentVersionId === c.versionId &&
         (!scope.topic ||
           (c.title + "\n" + c.quote)
@@ -106,13 +108,22 @@ export function retrieve(
     })
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score || a.c.id.localeCompare(b.c.id));
+  return ranked.slice(0, limit).map((x) => x.c);
+}
+export function packEvidence(candidates: Evidence[]): Evidence[] {
   let size = 0;
-  return ranked
-    .filter((x) => {
-      if (size + x.c.quote.length > MAX_CONTEXT_CHARS) return false;
-      size += x.c.quote.length;
+  return candidates
+    .filter((c) => {
+      if (size + c.quote.length > MAX_CONTEXT_CHARS) return false;
+      size += c.quote.length;
       return true;
     })
-    .slice(0, 8)
-    .map((x) => x.c);
+    .slice(0, 8);
+}
+export function retrieve(
+  repo: LibraryRepository,
+  question: string,
+  scope: QaScope,
+): Evidence[] {
+  return packEvidence(keywordCandidates(repo, question, scope, 1000));
 }

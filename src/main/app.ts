@@ -58,10 +58,13 @@ app.whenReady().then(() => {
       sandbox: true,
     },
   });
-  registerIpc(win, repo, queue);
+  const closeServices = registerIpc(win, repo, queue);
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event) => event.preventDefault());
   void win.loadFile(join(__dirname, "../renderer/index.html"));
-  app.on("before-quit", () => queue.stop());
+  app.on("before-quit", () => {
+    queue.stop();
+    closeServices();
+  });
 });
 app.on("window-all-closed", () => app.quit());

@@ -1,3 +1,4 @@
+import type { Retriever } from "./hybrid";
 import { randomUUID } from "node:crypto";
 import type { LibraryRepository } from "../library/repository";
 import {
@@ -33,6 +34,7 @@ export class QaService {
     private repo: LibraryRepository,
     private settings: ModelSettings,
     private timeoutMs = 120000,
+    private retriever?: Retriever,
   ) {
     for (const record of repo.listQa())
       if (record.status === "pending")
@@ -59,7 +61,7 @@ export class QaService {
       provider,
       model: profile.model,
       status: "pending",
-      evidence: retrieve(this.repo, question, scope),
+      evidence: this.retriever ? [] : retrieve(this.repo, question, scope),
     };
     this.repo.putQa(record);
     const controller = new AbortController();
@@ -74,10 +76,28 @@ export class QaService {
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       if (controller.signal.aborted) throw Error("cancelled");
+      let profile: ReturnType<ModelSettings["resolve"]> | undefined;
+      let profileError: unknown;
+      try {
+        profile = this.settings.resolve(record.provider);
+        record.model = profile.model;
+      } catch (e) {
+        profileError = e;
+      }
+      if (this.retriever) {
+        const result = await this.retriever.retrieve(
+          record.question,
+          record.scope,
+          controller.signal,
+        );
+        record.evidence = result.evidence;
+        record.retrieval = result.trace;
+        this.repo.putQa(record);
+      }
       if (!record.evidence.length && !record.allowSupplement) {
         record.answer = { paragraphs: [], insufficient: true, supplement: "" };
       } else {
-        const profile = this.settings.resolve(record.provider);
+        if (!profile) throw profileError;
         const content = await requestModel(
           profile,
           [
@@ -107,7 +127,7 @@ export class QaService {
         const message = e instanceof Error ? e.message : "";
         record.error = controller.signal.aborted
           ? "请求超时，请重试或切换模型"
-          : /^(请先|系统|无法解密|API Key|模型)/.test(message)
+          : /^(请先|系统|无法解密|API Key|模型|检索)/.test(message)
             ? message.slice(0, 1000)
             : "无法连接模型服务，请检查地址、网络或本地服务后重试";
       }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { retrievalTraceSchema } from "./retrieval";
 export const MAX_CONTEXT_CHARS = 18000;
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const scopeSchema = z.object({
@@ -30,6 +31,7 @@ export const answerSchema = z.object({
   supplement: z.string().max(16000),
 });
 export const recordSchema = z.object({
+  retrieval: retrievalTraceSchema.optional(),
   id: z.string().regex(/^[a-f0-9-]{36,128}$/),
   createdAt: z.string().datetime(),
   question: z.string().min(1).max(4000),

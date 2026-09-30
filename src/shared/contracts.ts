@@ -1,4 +1,9 @@
 import type {
+  RetrievalConfig,
+  RetrievalInput,
+  VectorStatus,
+} from "./retrieval";
+import type {
   ModelProfile,
   ProfileInput,
   QaRecord,
@@ -105,6 +110,7 @@ export interface BackupPreview {
   totalBytes: number;
 }
 export interface LibraryState {
+  vectorIndex?: VectorStatus;
   knowledgeIndex?: { articles: number; chunks: number };
   sources: Source[];
   articles: Article[];
@@ -112,6 +118,10 @@ export interface LibraryState {
   root: string;
 }
 export interface LibraryApi {
+  retrievalConfig(): Promise<RetrievalConfig>;
+  saveRetrieval(input: RetrievalInput): Promise<RetrievalConfig>;
+  testRetrieval(): Promise<{ dimensions: number }>;
+  controlVectorIndex(action: "start" | "pause" | "rebuild"): Promise<void>;
   modelProfiles(): Promise<ModelProfile[]>;
   saveModel(input: ProfileInput): Promise<ModelProfile[]>;
   testModel(provider: "online" | "ollama"): Promise<void>;

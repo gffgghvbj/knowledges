@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 const names = [
+  "retrievalConfig",
+  "saveRetrieval",
+  "testRetrieval",
+  "controlVectorIndex",
   "modelProfiles",
   "saveModel",
   "testModel",

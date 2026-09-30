@@ -1,3 +1,8 @@
+import { RetrievalSettings } from "./knowledge/retrieval-settings";
+import { VectorIndex } from "./knowledge/vector-index";
+import { HybridRetriever } from "./knowledge/hybrid";
+import { embed, rerank, retrievalError } from "./knowledge/retrieval-api";
+import { retrievalSettingsSchema } from "../shared/retrieval";
 import { ModelSettings } from "./knowledge/settings";
 import { QaService } from "./knowledge/service";
 import { requestModel } from "./knowledge/model";
@@ -40,7 +45,51 @@ export function registerIpc(
       return fn(...values);
     });
   const settings = new ModelSettings(repo.root, safeStorage),
-    qa = new QaService(repo, settings);
+    retrievalSettings = new RetrievalSettings(repo.root, safeStorage),
+    vectorIndex = new VectorIndex(repo, retrievalSettings),
+    qa = new QaService(
+      repo,
+      settings,
+      120000,
+      new HybridRetriever(repo, retrievalSettings, vectorIndex),
+    );
+  vectorIndex.watch();
+  handle("retrievalConfig", z.tuple([]), () => retrievalSettings.get());
+  handle("saveRetrieval", z.tuple([retrievalSettingsSchema]), (input) => {
+    vectorIndex.pause();
+    return retrievalSettings.save(input);
+  });
+  handle(
+    "controlVectorIndex",
+    z.tuple([z.enum(["start", "pause", "rebuild"])]),
+    (action) => {
+      if (action === "pause") vectorIndex.pause();
+      else if (action === "rebuild") vectorIndex.rebuild();
+      else vectorIndex.start();
+    },
+  );
+  handle("testRetrieval", z.tuple([]), async () => {
+    try {
+      const config = retrievalSettings.resolve(),
+        signal = AbortSignal.timeout(30000);
+      const vectors = await embed(
+        config.embedding,
+        ["数据库持久化保存数据"],
+        "document",
+        signal,
+      );
+      if (config.rerank.enabled)
+        await rerank(
+          config.rerank,
+          "如何保存数据",
+          ["数据库持久化保存数据", "花卉种植"],
+          signal,
+        );
+      return { dimensions: vectors[0].length };
+    } catch (e) {
+      throw Error(retrievalError(e));
+    }
+  });
   handle("modelProfiles", z.tuple([]), () => settings.list());
   handle("saveModel", z.tuple([profileSchema]), (input) =>
     settings.save(input),
@@ -84,6 +133,7 @@ export function registerIpc(
     articles: repo.listArticles(),
     tasks: repo.listTasks(),
     root: repo.root,
+    vectorIndex: vectorIndex.status(),
     knowledgeIndex: {
       articles: repo.listArticles().length,
       chunks: Number(
@@ -183,4 +233,5 @@ export function registerIpc(
     if (!approvedImports.has(path)) throw Error("请先选择并检查备份文件");
     return importBackup(repo, path);
   });
+  return () => vectorIndex.close();
 }

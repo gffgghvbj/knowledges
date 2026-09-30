@@ -100,7 +100,8 @@ export function BackupPage({
       <div className="info-note">
         <b>合并规则</b>
         <p>
-          同一篇文章优先使用采集时间较新的版本；旧版本保留。导入不会迁移网站登录信息，也不会自动开始采集。
+          同一篇文章优先使用采集时间较新的版本；旧版本保留。导入不迁移登录信息、密钥或向量缓存，也不会自动采集网站。若本机已开启自动向量索引，导入资料会发送到所配置的
+          Embedding 服务补齐索引。
         </p>
       </div>
       <div className="storage-path">

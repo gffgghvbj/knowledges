@@ -90,9 +90,12 @@ export function KnowledgePage({
           <h2>知识库问答</h2>
           <p>从你的资料中找答案，让每一次理解都有出处。</p>
           <small>
-            本地索引已就绪 ·{" "}
+            关键词索引已就绪 ·{" "}
             {state.knowledgeIndex?.articles ?? state.articles.length} 篇文章 ·{" "}
             {state.knowledgeIndex?.chunks ?? 0} 个段落
+            {state.vectorIndex?.state !== "disabled" && state.vectorIndex
+              ? ` · 向量 ${state.vectorIndex.ready}/${state.vectorIndex.total} 段`
+              : " · 向量检索未启用"}
           </small>
         </div>
         <button onClick={onSettings}>模型设置 ↗</button>
@@ -140,9 +143,33 @@ export function KnowledgePage({
                   {current.scope.topic ? ` / 主题：${current.scope.topic}` : ""}
                 </small>
               </div>
+              {current.retrieval && (
+                <div className="retrieval-trace">
+                  <small>
+                    本次使用：
+                    {
+                      {
+                        keyword: "关键词检索",
+                        "keyword-rerank": "关键词检索 + 精排",
+                        hybrid: "关键词 + 向量混合检索",
+                        "hybrid-rerank": "混合检索 + 精排",
+                      }[current.retrieval.mode]
+                    }
+                    {current.retrieval.embeddingModel
+                      ? ` · ${current.retrieval.embeddingModel}`
+                      : ""}
+                    {current.retrieval.rerankModel
+                      ? ` · ${current.retrieval.rerankModel}`
+                      : ""}
+                  </small>
+                  {current.retrieval.warning && (
+                    <p>{current.retrieval.warning}</p>
+                  )}
+                </div>
+              )}
               {current.status === "pending" ? (
                 <div className="info-note">
-                  <b aria-live="polite">正在生成回答…</b>
+                  <b aria-live="polite">正在检索与生成回答…</b>
                   <p>
                     已找到 {current.evidence.length}{" "}
                     个相关段落。可以切换页面，完成后记录会自动保存。
