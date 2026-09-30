@@ -1,3 +1,4 @@
+import { recordSchema } from "../../shared/knowledge";
 import { existsSync, readFileSync } from "node:fs";
 import type { LibraryRepository } from "../library/repository";
 import { atomicWrite, hash, safePath } from "../library/files";
@@ -7,7 +8,8 @@ export async function inspectBackup(path: string): Promise<BackupPreview> {
   const backup = await validateBackup(path);
   try {
     return {
-      formatVersion: 1,
+      formatVersion: backup.manifest.formatVersion,
+      questionCount: backup.manifest.qaRecords.length,
       recordCount: backup.manifest.articles.length,
       totalBytes: backup.manifest.files.reduce((n, f) => n + f.size, 0),
     };
@@ -75,6 +77,31 @@ export async function importBackup(
         } else {
           report.duplicates++;
         }
+      }
+      const existingQuestions = new Map(repo.listQa().map((q) => [q.id, q]));
+      report.questionsAdded = 0;
+      report.questionConflicts = 0;
+      for (const original of m.qaRecords) {
+        const incoming =
+          original.status === "pending"
+            ? {
+                ...original,
+                status: "failed" as const,
+                error: "导入的未完成请求，可以重试",
+              }
+            : original;
+        const existing = existingQuestions.get(incoming.id);
+        const canonical = (q: typeof incoming) =>
+          JSON.stringify(recordSchema.parse(q));
+        if (existing && canonical(existing) === canonical(incoming)) continue;
+        const target = existing
+          ? { ...incoming, id: hash(incoming.id + canonical(incoming)) }
+          : incoming;
+        if (existingQuestions.has(target.id)) continue;
+        repo.putQa(target);
+        existingQuestions.set(target.id, target);
+        report.questionsAdded++;
+        if (existing) report.questionConflicts++;
       }
       for (const a of repo.listArticles())
         repo.index(a, repo.readArticle(a.id).markdown);

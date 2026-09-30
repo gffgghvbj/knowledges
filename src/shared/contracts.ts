@@ -1,3 +1,9 @@
+import type {
+  ModelProfile,
+  ProfileInput,
+  QaRecord,
+  QaScope,
+} from "./knowledge";
 export interface Source {
   id: string;
   entryUrl: string;
@@ -84,6 +90,8 @@ export interface CaptureTask {
   mode: "scan" | "capture" | "update";
 }
 export interface MergeReport {
+  questionsAdded?: number;
+  questionConflicts?: number;
   added: number;
   updated: number;
   duplicates: number;
@@ -91,17 +99,30 @@ export interface MergeReport {
   failed: number;
 }
 export interface BackupPreview {
+  questionCount?: number;
   formatVersion: number;
   recordCount: number;
   totalBytes: number;
 }
 export interface LibraryState {
+  knowledgeIndex?: { articles: number; chunks: number };
   sources: Source[];
   articles: Article[];
   tasks: CaptureTask[];
   root: string;
 }
 export interface LibraryApi {
+  modelProfiles(): Promise<ModelProfile[]>;
+  saveModel(input: ProfileInput): Promise<ModelProfile[]>;
+  testModel(provider: "online" | "ollama"): Promise<void>;
+  ask(
+    question: string,
+    scope: QaScope,
+    provider: "online" | "ollama",
+    allowSupplement: boolean,
+  ): Promise<string>;
+  qaHistory(): Promise<QaRecord[]>;
+  cancelQa(id: string): Promise<void>;
   getStatus(): Promise<{ ready: boolean }>;
   state(): Promise<LibraryState>;
   addSource(url: string): Promise<Source>;
@@ -122,7 +143,7 @@ export interface LibraryApi {
     section?: string,
     page?: number,
   ): Promise<{ items: Article[]; total: number }>;
-  openArticle(id: string): Promise<void>;
+  openArticle(id: string, versionId?: string): Promise<void>;
   openUrl(url: string): Promise<void>;
   exportBackup(): Promise<{ cancelled: boolean; path?: string }>;
   inspectBackup(): Promise<{ path: string; preview: BackupPreview } | null>;

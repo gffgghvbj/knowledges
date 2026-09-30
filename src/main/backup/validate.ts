@@ -97,6 +97,36 @@ export async function validateBackup(
     )
       throw Error("备份包含未声明文件");
     validateRelations(manifest, expected);
+    const qaIds = new Set<string>();
+    for (const record of manifest.qaRecords) {
+      if (qaIds.has(record.id)) throw Error("问答标识重复");
+      qaIds.add(record.id);
+      const ids = new Set(record.evidence.map((e) => e.id));
+      if (record.status === "complete" && !record.answer)
+        throw Error("问答答案缺失");
+      if (
+        record.answer?.paragraphs.some((p) =>
+          p.sources.some((id) => !ids.has(id)),
+        )
+      )
+        throw Error("问答引用无效");
+      for (const e of record.evidence) {
+        const version = manifest.versions.find(
+          (v) => v.id === e.versionId && v.articleId === e.articleId,
+        );
+        if (!version) throw Error("问答引用版本缺失");
+        const lines = readFileSync(
+          safePath(root, version.markdownPath),
+          "utf8",
+        ).split("\n");
+        if (
+          e.lineEnd > lines.length ||
+          e.quote !== lines.slice(e.lineStart - 1, e.lineEnd).join("\n") ||
+          e.id !== hash(e.versionId + ":" + (e.lineStart - 1) + ":" + e.lineEnd)
+        )
+          throw Error("问答引用与原文不一致");
+      }
+    }
     return {
       root,
       manifest,

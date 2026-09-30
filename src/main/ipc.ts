@@ -1,4 +1,14 @@
-import { ipcMain, dialog, shell, type BrowserWindow } from "electron";
+import { ModelSettings } from "./knowledge/settings";
+import { QaService } from "./knowledge/service";
+import { requestModel } from "./knowledge/model";
+import { profileSchema, scopeSchema } from "../shared/knowledge";
+import {
+  ipcMain,
+  dialog,
+  shell,
+  safeStorage,
+  type BrowserWindow,
+} from "electron";
 import { z } from "zod";
 import { LibraryRepository } from "./library/repository";
 import { CaptureQueue } from "./capture/queue";
@@ -29,12 +39,58 @@ export function registerIpc(
       const values = schema.parse(args) as any[];
       return fn(...values);
     });
+  const settings = new ModelSettings(repo.root, safeStorage),
+    qa = new QaService(repo, settings);
+  handle("modelProfiles", z.tuple([]), () => settings.list());
+  handle("saveModel", z.tuple([profileSchema]), (input) =>
+    settings.save(input),
+  );
+  handle(
+    "testModel",
+    z.tuple([z.enum(["online", "ollama"])]),
+    async (provider) => {
+      try {
+        await requestModel(
+          settings.resolve(provider),
+          [{ role: "user", content: 'Return JSON: {"ok":true}' }],
+          AbortSignal.timeout(30000),
+        );
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "";
+        throw Error(
+          /^(请先|无法解密|API Key|模型)/.test(message)
+            ? message
+            : "连接失败或超时，请检查模型设置与网络",
+        );
+      }
+    },
+  );
+  handle(
+    "ask",
+    z.tuple([
+      z.string().trim().min(1).max(4000),
+      scopeSchema,
+      z.enum(["online", "ollama"]),
+      z.boolean(),
+    ]),
+    (question, scope, provider, supplement) =>
+      qa.ask(question, scope, provider, supplement),
+  );
+  handle("qaHistory", z.tuple([]), () => repo.listQa());
+  handle("cancelQa", z.tuple([id]), (id) => qa.cancel(id));
   handle("getStatus", z.tuple([]), () => ({ ready: true }));
   handle("state", z.tuple([]), () => ({
     sources: repo.listSources(),
     articles: repo.listArticles(),
     tasks: repo.listTasks(),
     root: repo.root,
+    knowledgeIndex: {
+      articles: repo.listArticles().length,
+      chunks: Number(
+        repo.db.prepare("SELECT count(*) AS n FROM knowledge_chunks").get()
+          ?.n ?? 0,
+      ),
+    },
   }));
   handle("addSource", z.tuple([text]), (url) => repo.addSource(url));
   handle("login", z.tuple([id]), (sourceId) => {
@@ -83,13 +139,21 @@ export function registerIpc(
         page,
       ),
   );
-  handle("openArticle", z.tuple([id]), async (articleId) => {
-    if (!repo.getArticle(articleId)) throw Error("文章不存在");
-    const error = await shell.openPath(
-      repo.resolvePath(`articles/${articleId}/current.md`),
-    );
-    if (error) throw Error(error);
-  });
+  handle(
+    "openArticle",
+    z.tuple([id, id.optional()]),
+    async (articleId, versionId) => {
+      const value = repo.readArticle(articleId, versionId);
+      const error = await shell.openPath(
+        repo.resolvePath(
+          versionId
+            ? value.version.markdownPath
+            : `articles/${articleId}/current.md`,
+        ),
+      );
+      if (error) throw Error(error);
+    },
+  );
   handle("openUrl", z.tuple([text]), (url) =>
     shell.openExternal(normalizeUrl(url)),
   );

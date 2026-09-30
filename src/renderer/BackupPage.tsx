@@ -34,7 +34,10 @@ export function BackupPage({
         <section className="source-card">
           <div className="empty-icon">↗</div>
           <h3>导出资料库</h3>
-          <p>包含文章、图片和历史版本。网站登录状态不会放入备份。</p>
+          <p>
+            包含文章、图片、历史版本和问答记录。网站登录状态、模型设置和 API Key
+            不会放入备份。
+          </p>
           <button
             className="primary"
             disabled={busy}
@@ -65,6 +68,7 @@ export function BackupPage({
             <div className="import-preview">
               <p>
                 校验通过 · {pending.preview.recordCount} 篇文章 ·{" "}
+                {pending.preview.questionCount ?? 0} 条问答 ·{" "}
                 {(pending.preview.totalBytes / 1024 / 1024).toFixed(1)} MB
               </p>
               <button
@@ -86,7 +90,9 @@ export function BackupPage({
               新增 {report.added} · 更新 {report.updated} · 重复{" "}
               {report.duplicates} · 冲突 {report.conflicts}
               <br />
-              同时间冲突保留本机当前版本，双方历史均已保存。
+              新增问答 {report.questionsAdded ?? 0} · 问答冲突{" "}
+              {report.questionConflicts ?? 0}
+              。同时间文章冲突保留本机当前版本；问答冲突保留双方记录。
             </p>
           )}
         </section>

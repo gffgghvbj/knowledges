@@ -1,3 +1,5 @@
+import { KnowledgePage } from "./KnowledgePage";
+import { ModelPage } from "./ModelPage";
 import { useEffect, useState } from "react";
 import type { LibraryState } from "../shared/contracts";
 import { api } from "./api";
@@ -54,6 +56,8 @@ export function App() {
             ["sources", "◈", "网站来源"],
             ["library", "▤", "资料库"],
             ["tasks", "⇣", "采集任务"],
+            ["qa", "✧", "知识库问答"],
+            ["models", "⚙", "模型设置"],
             ["backup", "⇄", "备份与迁移"],
           ].map(([id, icon, label]) => (
             <button
@@ -72,15 +76,13 @@ export function App() {
         </nav>
         <div className="later">
           <div className="nav-caption">后续阶段</div>
-          <p>
-            ◌　知识库问答 <small>待开发</small>
-          </p>
+
           <p>
             ◌　模拟面试 <small>待开发</small>
           </p>
         </div>
         <div className="sidebar-bottom">
-          <span className="status-dot" /> 本地资料库 <small>v0.1</small>
+          <span className="status-dot" /> 本地资料库 <small>v0.2</small>
           <p>资料属于你，随时可以带走。</p>
         </div>
       </aside>
@@ -91,6 +93,8 @@ export function App() {
             {
               (
                 {
+                  qa: "知识库问答",
+                  models: "模型设置",
                   sources: "网站来源",
                   library: "资料库",
                   tasks: "采集任务",
@@ -108,6 +112,14 @@ export function App() {
               <button onClick={() => setError("")}>关闭</button>
             </div>
           )}
+          {view === "qa" && (
+            <KnowledgePage
+              state={state}
+              run={run}
+              onSettings={() => setView("models")}
+            />
+          )}
+          {view === "models" && <ModelPage run={run} />}
           {view === "sources" && (
             <SourcePage
               state={state}

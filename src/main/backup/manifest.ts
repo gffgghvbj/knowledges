@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { recordSchema } from "../../shared/knowledge";
 const id = z.string().regex(/^[a-f0-9]{64}$/),
   time = z
     .string()
@@ -15,7 +16,8 @@ const asset = z.object({
   size: z.number().int().nonnegative(),
 });
 export const manifestSchema = z.object({
-  formatVersion: z.literal(1),
+  formatVersion: z.union([z.literal(1), z.literal(2)]),
+  qaRecords: z.array(recordSchema).max(100000).default([]),
   createdAt: time,
   sources: z.array(
     z.object({

@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from "electron";
 const names = [
+  "modelProfiles",
+  "saveModel",
+  "testModel",
+  "ask",
+  "qaHistory",
+  "cancelQa",
   "getStatus",
   "state",
   "addSource",

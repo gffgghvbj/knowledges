@@ -41,7 +41,11 @@ export function Reader({
         >
           原网页 ↗
         </button>
-        <button onClick={() => run(() => api.openArticle(value.article.id))}>
+        <button
+          onClick={() =>
+            run(() => api.openArticle(value.article.id, value.version.id))
+          }
+        >
           打开 Markdown
         </button>
       </div>

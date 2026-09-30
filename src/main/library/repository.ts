@@ -11,6 +11,8 @@ import type {
   CaptureTask,
 } from "../../shared/contracts";
 import { atomicWrite, hash, normalizeUrl, safePath } from "./files";
+import { indexKnowledge } from "../knowledge/index";
+import type { QaRecord } from "../../shared/knowledge";
 import { migrate } from "./schema";
 
 export class LibraryRepository {
@@ -20,6 +22,7 @@ export class LibraryRepository {
     this.db = new DatabaseSync(join(root, "library.sqlite"));
     migrate(this.db);
     this.recoverPendingWrites();
+    this.rebuildIndex();
   }
   close() {
     this.db.close();
@@ -234,6 +237,7 @@ export class LibraryRepository {
     if (article) this.putArticle({ ...article, sourceStatus: status });
   }
   index(article: Article, text: string) {
+    indexKnowledge(this.db, article, this.readArticle(article.id).markdown);
     this.db
       .prepare("INSERT OR REPLACE INTO search_docs VALUES (?,?,?)")
       .run(article.id, article.title, text);
@@ -248,6 +252,18 @@ export class LibraryRepository {
       for (const a of this.listArticles())
         this.index(a, this.readArticle(a.id).markdown);
     });
+  }
+  putQa(record: QaRecord) {
+    this.db
+      .prepare("INSERT OR REPLACE INTO qa_records VALUES (?,?)")
+      .run(record.id, JSON.stringify(record));
+  }
+  listQa(): QaRecord[] {
+    return this.db
+      .prepare("SELECT data FROM qa_records ORDER BY rowid DESC")
+      .all()
+      .map((r) => JSON.parse(r.data as string))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
   putTask(task: CaptureTask) {
     this.db
