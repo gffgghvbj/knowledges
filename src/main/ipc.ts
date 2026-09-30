@@ -58,7 +58,13 @@ export function registerIpc(
       120000,
       new HybridRetriever(repo, retrievalSettings, vectorIndex),
     );
-  registerInterviewIpc(handle, win, repo, settings);
+  const closeInterviews = registerInterviewIpc(
+    handle,
+    win,
+    repo,
+    settings,
+    new HybridRetriever(repo, retrievalSettings, vectorIndex),
+  );
   vectorIndex.watch();
   handle("retrievalConfig", z.tuple([]), () => retrievalSettings.get());
   handle("saveRetrieval", z.tuple([retrievalSettingsSchema]), (input) => {
@@ -258,5 +264,8 @@ export function registerIpc(
     if (!approvedImports.has(path)) throw Error("请先选择并检查备份文件");
     return importBackup(repo, path);
   });
-  return () => vectorIndex.close();
+  return () => {
+    vectorIndex.close();
+    closeInterviews();
+  };
 }

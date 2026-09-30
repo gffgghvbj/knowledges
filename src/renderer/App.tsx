@@ -1,3 +1,4 @@
+import { InterviewPage } from "./InterviewPage";
 import { QuestionBankPage } from "./QuestionBankPage";
 import { InterviewMaterialsPage } from "./InterviewMaterialsPage";
 import { KnowledgePage } from "./KnowledgePage";
@@ -59,6 +60,7 @@ export function App() {
             ["library", "▤", "资料库"],
             ["tasks", "⇣", "采集任务"],
             ["qa", "✧", "知识库问答"],
+            ["interview", "◇", "模拟面试"],
             ["bank", "▦", "题库"],
             ["materials", "▧", "面试资料"],
             ["models", "⚙", "模型设置"],
@@ -78,13 +80,6 @@ export function App() {
             </button>
           ))}
         </nav>
-        <div className="later">
-          <div className="nav-caption">后续阶段</div>
-
-          <p>
-            ◌　模拟面试 <small>待开发</small>
-          </p>
-        </div>
         <div className="sidebar-bottom">
           <span className="status-dot" /> 本地资料库 <small>v0.4</small>
           <p>资料属于你，随时可以带走。</p>
@@ -100,6 +95,7 @@ export function App() {
                   qa: "知识库问答",
                   materials: "面试资料",
                   bank: "题库",
+                  interview: "模拟面试",
                   models: "模型设置",
                   sources: "网站来源",
                   library: "资料库",
@@ -125,6 +121,7 @@ export function App() {
               onSettings={() => setView("models")}
             />
           )}
+          {view === "interview" && <InterviewPage run={run} />}
           {view === "bank" && <QuestionBankPage run={run} state={state} />}
           {view === "materials" && <InterviewMaterialsPage run={run} />}
           {view === "models" && <ModelPage run={run} state={state} />}

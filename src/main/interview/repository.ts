@@ -1,3 +1,4 @@
+import { sessionSchema, type InterviewSession } from "../../shared/interview";
 import type { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import {
@@ -74,5 +75,27 @@ export class InterviewRepository {
   }
   deleteQuestion(id: string) {
     this.db.prepare("DELETE FROM interview_questions WHERE id=?").run(id);
+  }
+  listSessions(): InterviewSession[] {
+    return this.db
+      .prepare("SELECT data FROM interview_sessions ORDER BY rowid DESC")
+      .all()
+      .map((r) => sessionSchema.parse(JSON.parse(r.data as string)));
+  }
+  getSession(id: string): InterviewSession | undefined {
+    const row = this.db
+      .prepare("SELECT data FROM interview_sessions WHERE id=?")
+      .get(id);
+    return row
+      ? sessionSchema.parse(JSON.parse(row.data as string))
+      : undefined;
+  }
+  putSession(record: InterviewSession) {
+    this.db
+      .prepare("INSERT OR REPLACE INTO interview_sessions VALUES (?,?)")
+      .run(record.id, JSON.stringify(sessionSchema.parse(record)));
+  }
+  deleteSession(id: string) {
+    this.db.prepare("DELETE FROM interview_sessions WHERE id=?").run(id);
   }
 }

@@ -1,3 +1,4 @@
+import type { InterviewConfig, InterviewSessionView } from "./interview";
 import type { InterviewQuestion, QuestionInput } from "./interview";
 import type { InterviewMaterial, MaterialInput } from "./interview";
 import type {
@@ -120,6 +121,14 @@ export interface LibraryState {
   root: string;
 }
 export interface LibraryApi {
+  interviewSessions(): Promise<InterviewSessionView[]>;
+  createInterview(config: InterviewConfig): Promise<string>;
+  saveInterviewDraft(id: string, index: number, text: string): Promise<void>;
+  submitInterviewAnswer(id: string, index: number, text: string): Promise<void>;
+  nextInterview(id: string): Promise<void>;
+  retryInterview(id: string): Promise<void>;
+  finishInterview(id: string): Promise<void>;
+  deleteInterview(id: string): Promise<void>;
   interviewQuestions(): Promise<InterviewQuestion[]>;
   saveInterviewQuestion(input: QuestionInput): Promise<InterviewQuestion>;
   deleteInterviewQuestion(id: string): Promise<void>;

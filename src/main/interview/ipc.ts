@@ -1,3 +1,7 @@
+import { InterviewService } from "./service";
+import { projectSession } from "./projection";
+import { configSchema } from "../../shared/interview";
+import type { Retriever } from "../knowledge/hybrid";
 import { QuestionService } from "./questions";
 import { ModelSettings } from "../knowledge/settings";
 import { questionInputSchema, providerSchema } from "../../shared/interview";
@@ -17,9 +21,39 @@ export function registerInterviewIpc(
   win: BrowserWindow,
   library: LibraryRepository,
   settings: ModelSettings,
+  retriever: Retriever,
 ) {
   const repo = new InterviewRepository(library.db);
   const questions = new QuestionService(library, repo, settings);
+  const service = new InterviewService(library, repo, settings, retriever);
+  handle("interviewSessions", z.tuple([]), () =>
+    repo.listSessions().map(projectSession),
+  );
+  handle("createInterview", z.tuple([configSchema]), (config) =>
+    service.create(config),
+  );
+  handle(
+    "saveInterviewDraft",
+    z.tuple([
+      interviewId,
+      z.number().int().min(0).max(19),
+      z.string().max(12000),
+    ]),
+    (id, index, text) => service.saveDraft(id, index, text),
+  );
+  handle(
+    "submitInterviewAnswer",
+    z.tuple([
+      interviewId,
+      z.number().int().min(0).max(19),
+      z.string().trim().min(1).max(12000),
+    ]),
+    (id, index, text) => service.submit(id, index, text),
+  );
+  handle("nextInterview", z.tuple([interviewId]), (id) => service.next(id));
+  handle("retryInterview", z.tuple([interviewId]), (id) => service.retry(id));
+  handle("finishInterview", z.tuple([interviewId]), (id) => service.finish(id));
+  handle("deleteInterview", z.tuple([interviewId]), (id) => service.delete(id));
   handle("interviewQuestions", z.tuple([]), () => repo.listQuestions());
   handle("saveInterviewQuestion", z.tuple([questionInputSchema]), (input) =>
     repo.saveQuestion(input),
@@ -64,4 +98,5 @@ export function registerInterviewIpc(
       importing = false;
     }
   });
+  return () => service.close();
 }
