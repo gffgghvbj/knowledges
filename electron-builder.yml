@@ -1,0 +1,13 @@
+appId: local.interview.library
+productName: 拾知
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+asar: true
+mac:
+  category: public.app-category.education
+  target: dmg
+win:
+  target: nsis
