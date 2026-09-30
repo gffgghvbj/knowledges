@@ -1,4 +1,4 @@
-import { beforeEach, afterEach, test, expect } from "vitest";
+import { beforeEach, afterEach, test, expect, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -154,4 +154,110 @@ test("pause followed by immediate resume cannot strand a queued task", async () 
   release();
   await q.waitForIdle();
   expect(repo.getTask(id)?.state).toBe("complete");
+});
+
+test("retrying failed discovery discovers descendants instead of saving the navigation page", async () => {
+  const s = repo.addSource("https://example.com/");
+  let recovered = false;
+  const q = new CaptureQueue(
+    repo,
+    {
+      load: async (_s, u) =>
+        u.endsWith("/b") && !recovered
+          ? { kind: "failed", reason: "timeout" }
+          : page(
+              u,
+              u.endsWith("/b")
+                ? '<h1>B</h1><a href="/c">C</a>'
+                : u.endsWith("/c")
+                  ? "<h1>C</h1>"
+                  : '<h1>Index</h1><a href="/b">B</a>',
+            ),
+      asset: async () => {
+        throw Error("unused");
+      },
+    },
+    0,
+  );
+  const id = q.scan(s.id);
+  await q.waitForIdle();
+  expect(repo.getTask(id)?.state).toBe("partial");
+  recovered = true;
+  q.retryFailed(id);
+  await q.waitForIdle();
+  expect(
+    repo
+      .getTask(id)
+      ?.items.some((i) => i.candidate.canonicalUrl.endsWith("/c")),
+  ).toBe(true);
+  expect(repo.listArticles()).toHaveLength(0);
+});
+
+test("manual update revisits saved articles no longer linked by the site", async () => {
+  const s = repo.addSource("https://example.com/");
+  const v = repo.saveArticle(
+    {
+      candidate: {
+        sourceId: s.id,
+        canonicalUrl: "https://example.com/orphan",
+        title: "旧文章",
+        sectionPath: [],
+      },
+      markdown: "保存的原文",
+      text: "保存的原文",
+      fetchedAt: "2026-09-30T00:00:00Z",
+      assets: [],
+    },
+    [],
+  );
+  const q = new CaptureQueue(
+    repo,
+    {
+      load: async (_s, u) =>
+        u.endsWith("/orphan")
+          ? { kind: "unavailable", reason: "404", statusCode: 404 }
+          : page(u),
+      asset: async () => {
+        throw Error("unused");
+      },
+    },
+    0,
+  );
+  q.scan(s.id, "update");
+  await q.waitForIdle();
+  expect(repo.getArticle(v.articleId)?.sourceStatus).toBe("removed");
+  expect(repo.readArticle(v.articleId).markdown).toBe("保存的原文");
+});
+test("server retry-after is honored even when longer than one minute", async () => {
+  vi.useFakeTimers();
+  try {
+    const s = repo.addSource("https://example.com/");
+    let calls = 0;
+    const q = new CaptureQueue(
+      repo,
+      {
+        load: async (_s, u) =>
+          ++calls === 1
+            ? {
+                kind: "unavailable",
+                reason: "limited",
+                statusCode: 429,
+                retryAfterMs: 120000,
+              }
+            : page(u),
+        asset: async () => {
+          throw Error("unused");
+        },
+      },
+      0,
+    );
+    q.startCapture(s.id, candidates(s));
+    await vi.advanceTimersByTimeAsync(60001);
+    expect(calls).toBe(1);
+    await vi.advanceTimersByTimeAsync(59999);
+    await q.waitForIdle();
+    expect(calls).toBe(2);
+  } finally {
+    vi.useRealTimers();
+  }
 });

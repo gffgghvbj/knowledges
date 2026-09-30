@@ -14,6 +14,56 @@ import { LibraryRepository } from "../../src/main/library/repository";
 import { exportLibrary } from "../../src/main/backup/export";
 import { validateBackup } from "../../src/main/backup/validate";
 import { importBackup } from "../../src/main/backup/merge";
+import { hash } from "../../src/main/library/files";
+
+test("rejects declared but unreferenced files before they can block storage directories", async () => {
+  const root = mkdtempSync(join(tmpdir(), "extra-file-"));
+  const repo = new LibraryRepository(join(root, "library"));
+  try {
+    const bytes = Buffer.from("block"),
+      zip = new ZipFile(),
+      path = join(root, "extra.ikb"),
+      done = pipeline(zip.outputStream, createWriteStream(path));
+    zip.addBuffer(
+      Buffer.from(
+        JSON.stringify({
+          formatVersion: 1,
+          createdAt: new Date().toISOString(),
+          sources: [],
+          articles: [],
+          versions: [],
+          files: [{ path: "articles", hash: hash(bytes), size: bytes.length }],
+        }),
+      ),
+      "manifest.json",
+    );
+    zip.addBuffer(bytes, "articles");
+    zip.end();
+    await done;
+    await expect(importBackup(repo, path)).rejects.toThrow("未被文章引用");
+    const s = repo.addSource("https://example.com/");
+    expect(() =>
+      repo.saveArticle(
+        {
+          candidate: {
+            sourceId: s.id,
+            canonicalUrl: s.entryUrl,
+            title: "x",
+            sectionPath: [],
+          },
+          markdown: "正文",
+          text: "正文",
+          assets: [],
+          fetchedAt: new Date().toISOString(),
+        },
+        [],
+      ),
+    ).not.toThrow();
+  } finally {
+    repo.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 test("rejects unsupported versions and path traversal before touching the target library", async () => {
   const root = mkdtempSync(join(tmpdir(), "invalid-backup-"));
   try {

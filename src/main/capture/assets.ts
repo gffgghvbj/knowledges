@@ -19,8 +19,10 @@ export async function downloadAssets(
       article.markdown = article.markdown
         .split(input.localRef)
         .join(`asset:${asset.hash}`);
-    } catch {
-      missing.push(input.remoteUrl);
+    } catch (error) {
+      missing.push(
+        `${input.remoteUrl}: ${error instanceof Error ? error.message : String(error)}`,
+      );
       article.markdown = article.markdown
         .split(input.localRef)
         .join(input.remoteUrl);

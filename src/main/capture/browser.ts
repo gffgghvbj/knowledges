@@ -2,6 +2,7 @@ import { BrowserWindow } from "electron";
 import type { Source, PageResult, PageSnapshot } from "../../shared/contracts";
 import { getAdapter } from "./adapters/types";
 import { sourceSession } from "./sessions";
+import { parseRetryAfter } from "./retry-after";
 
 export async function readLimited(
   response: Response,
@@ -63,10 +64,7 @@ export async function loadPage(
     if (response.status >= 400)
       return {
         ...result,
-        retryAfterMs: Math.max(
-          0,
-          Number(response.headers.get("retry-after") || 0) * 1000,
-        ),
+        retryAfterMs: parseRetryAfter(response.headers.get("retry-after")),
       };
     // Landing pages still carry useful discovery links even without article content.
     if (adapter.discover(snapshot).length > 0)
@@ -114,7 +112,7 @@ export async function fetchAsset(
 ): Promise<{ bytes: Buffer; mimeType: string }> {
   const response = await sourceSession(source).fetch(url, {
     signal: AbortSignal.timeout(25000),
-    headers: { Referer: source.entryUrl },
+    referrer: source.entryUrl,
   });
   if (!response.ok) throw new Error(`图片 HTTP ${response.status}`);
   return {

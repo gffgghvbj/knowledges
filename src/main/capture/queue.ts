@@ -80,16 +80,30 @@ export class CaptureQueue {
   }
   scan(sourceId: string, mode: "scan" | "update" = "scan") {
     const s = this.source(sourceId);
+    const saved =
+      mode === "update"
+        ? this.repo
+            .listArticles()
+            .filter(
+              (a) =>
+                a.sourceId === sourceId &&
+                (!s.selectedSections ||
+                  s.selectedSections.includes(a.sectionPath[0] || "其他")),
+            )
+        : [];
     return this.create(
       sourceId,
-      [...new Set([s.entryUrl, new URL(s.entryUrl).origin + "/"])].map(
-        (url) => ({
-          sourceId,
-          canonicalUrl: url,
-          title: s.label,
-          sectionPath: [],
-        }),
-      ),
+      [
+        ...[...new Set([s.entryUrl, new URL(s.entryUrl).origin + "/"])].map(
+          (url) => ({
+            sourceId,
+            canonicalUrl: url,
+            title: s.label,
+            sectionPath: [],
+          }),
+        ),
+        ...saved,
+      ],
       mode,
     );
   }
@@ -127,6 +141,7 @@ export class CaptureQueue {
   }
   retryFailed(id: string) {
     const t = this.task(id);
+    if (t.mode === "scan") t.scanComplete = false;
     for (const i of t.items)
       if (["partial", "failed"].includes(i.state)) {
         i.state = "queued";
@@ -157,7 +172,11 @@ export class CaptureQueue {
       });
     this.active.set(id, promise);
   }
-  private async load(source: Source, url: string): Promise<PageResult> {
+  private async load(
+    source: Source,
+    url: string,
+    taskId: string,
+  ): Promise<PageResult> {
     let result: PageResult = { kind: "failed", reason: "加载失败" };
     for (let attempt = 0; attempt < 4; attempt++) {
       if (this.stopped) return result;
@@ -174,14 +193,18 @@ export class CaptureQueue {
         result.statusCode !== 429
       )
         return result;
-      const delay =
-        this.interval === 0
-          ? 0
-          : Math.min(
-              60000,
-              Math.max(this.interval * 2 ** attempt, result.retryAfterMs || 0),
-            );
-      if (attempt < 3) await new Promise((r) => setTimeout(r, delay));
+      let remaining = Math.max(
+        this.interval * 2 ** attempt,
+        result.retryAfterMs || 0,
+      );
+      if (attempt < 3)
+        while (remaining > 0) {
+          if (this.stopped || this.task(taskId).state !== "running")
+            return result;
+          const chunk = Math.min(1000, remaining);
+          await new Promise((r) => setTimeout(r, chunk));
+          remaining -= chunk;
+        }
     }
     return result;
   }
@@ -228,7 +251,7 @@ export class CaptureQueue {
       const item = task.items[index];
       item.state = "running";
       this.repo.putTask(task);
-      const result = await this.load(source, item.candidate.canonicalUrl);
+      const result = await this.load(source, item.candidate.canonicalUrl, id);
       task = this.task(id);
       if (this.stopped || task.state !== "running") {
         task.items[index].state = "queued";
@@ -283,7 +306,7 @@ export class CaptureQueue {
           );
           task.items[index].state = missing.length ? "partial" : "complete";
           task.items[index].error = missing.length
-            ? `${missing.length} 张图片未下载，可重试`
+            ? `${missing.length} 张图片未下载，可重试。${missing.slice(0, 3).join("；")}`
             : undefined;
         } catch (error) {
           task.items[index].state = "failed";

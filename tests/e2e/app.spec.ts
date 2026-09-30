@@ -6,7 +6,8 @@ import { join } from "node:path";
 test("desktop starts with a usable, isolated local bridge", async () => {
   const root = await mkdtemp(join(tmpdir(), "library-e2e-"));
   const app = await electron.launch({
-    args: ["."],
+    args: process.env.ELECTRON_APP_PATH ? [] : ["."],
+    executablePath: process.env.ELECTRON_APP_PATH,
     env: { ...process.env, LIBRARY_DATA_DIR: root },
   });
   try {

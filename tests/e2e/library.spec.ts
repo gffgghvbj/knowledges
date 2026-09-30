@@ -6,16 +6,27 @@ import { join } from "node:path";
 
 test("collects, reads and searches an article through the desktop UI", async () => {
   const server = createServer((_req, res) => {
+    if (_req.url === "/image.png") {
+      res.setHeader("Content-Type", "image/png");
+      res.end(
+        Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6fT8AAAAASUVORK5CYII=",
+          "base64",
+        ),
+      );
+      return;
+    }
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.end(
-      '<article><h1>Redis 内存回收</h1><p>C++ 与垃圾回收测试资料。</p><pre><code class="language-java">return 1;</code></pre><a href="/">首页</a></article>',
+      '<article><h1>Redis 内存回收</h1><p>C++ 与垃圾回收测试资料。</p><pre><code class="language-java">return 1;</code></pre><img src="/image.png" alt="本地图片"><a href="/">首页</a></article>',
     );
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const port = (server.address() as any).port;
   const root = await mkdtemp(join(tmpdir(), "library-flow-"));
   const app = await electron.launch({
-    args: ["."],
+    args: process.env.ELECTRON_APP_PATH ? [] : ["."],
+    executablePath: process.env.ELECTRON_APP_PATH,
     env: { ...process.env, LIBRARY_DATA_DIR: root },
   });
   try {
@@ -50,6 +61,13 @@ test("collects, reads and searches an article through the desktop UI", async () 
     await expect(page.locator(".markdown")).toContainText(
       "C++ 与垃圾回收测试资料。",
     );
+    await expect
+      .poll(() =>
+        page
+          .locator(".markdown img")
+          .evaluate((img: HTMLImageElement) => img.naturalWidth),
+      )
+      .toBe(1);
     await page.screenshot({
       path: "test-results/library-desktop.png",
       fullPage: true,
@@ -81,7 +99,8 @@ test("login cookie is reused for capture and remote login window has no local br
   const port = (server.address() as any).port;
   const root = await mkdtemp(join(tmpdir(), "library-login-"));
   const app = await electron.launch({
-    args: ["."],
+    args: process.env.ELECTRON_APP_PATH ? [] : ["."],
+    executablePath: process.env.ELECTRON_APP_PATH,
     env: { ...process.env, LIBRARY_DATA_DIR: root },
   });
   try {

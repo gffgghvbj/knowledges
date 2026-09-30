@@ -27,7 +27,23 @@ export function getAdapter(source: Source): SiteAdapter {
     canonicalize: normalizeUrl,
     classify(snapshot) {
       const { document } = parseHTML(snapshot.html);
+      const gateText =
+        /(?:扫码|扫描二维码|登录|登陆|会员|订阅|付费|解锁).{0,12}(?:阅读|查看|全文|继续|访问)|(?:阅读|查看).{0,12}(?:登录|登陆|订阅|付费)/;
+      const gateElements = [
+        ...document.querySelectorAll(
+          "h1, [role=dialog], .paywall, .login-wall, .login-required, .subscription-gate",
+        ),
+      ];
+      const body = document.querySelector(selector),
+        shortBody = body?.textContent?.trim() || "";
+      const gated =
+        gateElements.some(
+          (el) =>
+            !el.hasAttribute("hidden") && gateText.test(el.textContent || ""),
+        ) ||
+        (shortBody.length < 600 && gateText.test(shortBody));
       if (
+        gated ||
         [401, 403].includes(snapshot.statusCode) ||
         document.querySelector("input[type=password]") ||
         /\/(login|signin)(\/|\?|$)/i.test(snapshot.finalUrl)

@@ -108,6 +108,18 @@ export async function validateBackup(
   }
 }
 function validateRelations(m: Manifest, files: Set<string>) {
+  const referenced = new Set([
+    "manifest.json",
+    ...m.versions.flatMap((v) => [
+      v.markdownPath,
+      ...v.assets.map((a) => a.relativePath),
+    ]),
+  ]);
+  if (
+    files.size !== referenced.size ||
+    [...files].some((path) => !referenced.has(path))
+  )
+    throw Error("备份包含未被文章引用的文件");
   const sources = new Map(m.sources.map((s) => [s.id, s])),
     articles = new Map(m.articles.map((a) => [a.id, a])),
     versions = new Map(m.versions.map((v) => [v.id, v]));

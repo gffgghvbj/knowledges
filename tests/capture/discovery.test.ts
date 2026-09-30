@@ -58,3 +58,20 @@ test("known site selectors prefer article body to navigation", () => {
     ).not.toContain("菜单");
   }
 });
+
+test("QR login or subscription gates are not accepted as replacement article bodies", () => {
+  const adapter = getAdapter(source);
+  for (const html of [
+    '<main><h1>扫码登录后阅读全文</h1><img src="qr.png"></main>',
+    "<main><p>请登录后查看全文</p></main>",
+    '<article><h1>Redis</h1><div class="paywall">订阅后阅读全文</div></article>',
+  ])
+    expect(adapter.classify(snap(html)).kind).toBe("login-required");
+  expect(
+    adapter.classify(
+      snap(
+        "<article><h1>如何实现扫码登录</h1><p>这里介绍二维码的生成和状态查询。</p></article>",
+      ),
+    ).kind,
+  ).toBe("article");
+});
