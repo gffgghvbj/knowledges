@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 const names = [
+  "interviewMaterials",
+  "saveInterviewMaterial",
+  "deleteInterviewMaterial",
+  "importInterviewDocument",
   "retrievalConfig",
   "saveRetrieval",
   "testRetrieval",

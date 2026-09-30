@@ -1,3 +1,4 @@
+import { InterviewMaterialsPage } from "./InterviewMaterialsPage";
 import { KnowledgePage } from "./KnowledgePage";
 import { ModelPage } from "./ModelPage";
 import { useEffect, useState } from "react";
@@ -57,6 +58,7 @@ export function App() {
             ["library", "▤", "资料库"],
             ["tasks", "⇣", "采集任务"],
             ["qa", "✧", "知识库问答"],
+            ["materials", "▧", "面试资料"],
             ["models", "⚙", "模型设置"],
             ["backup", "⇄", "备份与迁移"],
           ].map(([id, icon, label]) => (
@@ -94,6 +96,7 @@ export function App() {
               (
                 {
                   qa: "知识库问答",
+                  materials: "面试资料",
                   models: "模型设置",
                   sources: "网站来源",
                   library: "资料库",
@@ -119,6 +122,7 @@ export function App() {
               onSettings={() => setView("models")}
             />
           )}
+          {view === "materials" && <InterviewMaterialsPage run={run} />}
           {view === "models" && <ModelPage run={run} state={state} />}
           {view === "sources" && (
             <SourcePage

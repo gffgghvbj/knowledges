@@ -1,3 +1,4 @@
+import { registerInterviewIpc } from "./interview/ipc";
 import { RetrievalSettings } from "./knowledge/retrieval-settings";
 import { VectorIndex } from "./knowledge/vector-index";
 import { HybridRetriever } from "./knowledge/hybrid";
@@ -57,6 +58,7 @@ export function registerIpc(
       120000,
       new HybridRetriever(repo, retrievalSettings, vectorIndex),
     );
+  registerInterviewIpc(handle, win, repo);
   vectorIndex.watch();
   handle("retrievalConfig", z.tuple([]), () => retrievalSettings.get());
   handle("saveRetrieval", z.tuple([retrievalSettingsSchema]), (input) => {

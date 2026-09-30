@@ -18,7 +18,9 @@
   "dependencies": {
     "dompurify": "^3.4.16",
     "linkedom": "^0.18.13",
+    "mammoth": "1.13.0",
     "markdown-it": "^15.0.2",
+    "pdfjs-dist": "6.3.289",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "turndown": "^7.2.4",

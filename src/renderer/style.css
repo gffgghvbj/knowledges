@@ -1169,3 +1169,43 @@ details {
 .qa-history .modal input {
   box-sizing: border-box;
 }
+.interview-grid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.interview-form {
+  display: grid;
+  gap: 16px;
+}
+.interview-form label {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  color: #456057;
+}
+.interview-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  line-height: 1.7;
+}
+.interview-form input,
+.interview-form select {
+  width: 100%;
+  box-sizing: border-box;
+}
+.form-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.interview-grid .source-card {
+  min-width: 0;
+}
+@media (max-width: 1100px) {
+  .interview-grid {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+}

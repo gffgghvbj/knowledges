@@ -73,7 +73,7 @@ test("第一版 SQLite 自动升级，原文与版本保持不变", () => {
     );
     repo.close();
     repo = new LibraryRepository(root);
-    expect(repo.db.prepare("PRAGMA user_version").get()?.user_version).toBe(4);
+    expect(repo.db.prepare("PRAGMA user_version").get()?.user_version).toBe(5);
     expect(repo.readArticle(v.articleId, v.id).markdown).toBe("AOF 追加日志。");
     expect(retrieve(repo, "AOF", {})[0].versionId).toBe(v.id);
     expect(repo.listQa()).toEqual([]);

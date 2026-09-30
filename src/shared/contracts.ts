@@ -1,3 +1,4 @@
+import type { InterviewMaterial, MaterialInput } from "./interview";
 import type {
   RetrievalConfig,
   RetrievalInput,
@@ -118,6 +119,10 @@ export interface LibraryState {
   root: string;
 }
 export interface LibraryApi {
+  interviewMaterials(): Promise<InterviewMaterial[]>;
+  saveInterviewMaterial(input: MaterialInput): Promise<InterviewMaterial>;
+  deleteInterviewMaterial(id: string): Promise<void>;
+  importInterviewDocument(): Promise<{ name: string; text: string } | null>;
   retrievalConfig(): Promise<RetrievalConfig>;
   saveRetrieval(input: RetrievalInput): Promise<RetrievalConfig>;
   testRetrieval(): Promise<{ dimensions: number }>;
