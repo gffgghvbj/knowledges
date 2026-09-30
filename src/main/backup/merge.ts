@@ -1,3 +1,4 @@
+import { InterviewRepository } from "../interview/repository";
 import { recordSchema } from "../../shared/knowledge";
 import { existsSync, readFileSync } from "node:fs";
 import type { LibraryRepository } from "../library/repository";
@@ -9,6 +10,9 @@ export async function inspectBackup(path: string): Promise<BackupPreview> {
   try {
     return {
       formatVersion: backup.manifest.formatVersion,
+      interviewCount: backup.manifest.interviewSessions.length,
+      materialCount: backup.manifest.interviewMaterials.length,
+      bankCount: backup.manifest.interviewQuestions.length,
       questionCount: backup.manifest.qaRecords.length,
       recordCount: backup.manifest.articles.length,
       totalBytes: backup.manifest.files.reduce((n, f) => n + f.size, 0),
@@ -44,6 +48,46 @@ export async function importBackup(
           readFileSync(safePath(backup.root, f.path)),
         );
     repo.transaction(() => {
+      const interviews = new InterviewRepository(repo.db);
+      report.interviewsAdded = 0;
+      report.interviewConflicts = 0;
+      const mergeRecords = <T extends { id: string }>(
+        incoming: T[],
+        existing: T[],
+        put: (row: T) => void,
+      ) => {
+        const byId = new Map(existing.map((r) => [r.id, r]));
+        for (const row of incoming) {
+          const old = byId.get(row.id),
+            canonical = JSON.stringify(row);
+          if (old && JSON.stringify(old) === canonical) continue;
+          const target = old ? { ...row, id: hash(row.id + canonical) } : row;
+          if (byId.has(target.id)) continue;
+          put(target);
+          byId.set(target.id, target);
+          report.interviewsAdded!++;
+          if (old) report.interviewConflicts!++;
+        }
+      };
+      mergeRecords(m.interviewMaterials, interviews.listMaterials(), (r) =>
+        interviews.putMaterial(r),
+      );
+      mergeRecords(m.interviewQuestions, interviews.listQuestions(), (r) =>
+        interviews.putQuestion(r),
+      );
+      mergeRecords(
+        m.interviewSessions.map((s) =>
+          ["preparing", "grading"].includes(s.status)
+            ? {
+                ...s,
+                status: "failed" as const,
+                error: "导入的未完成面试，进度已保存，请重试",
+              }
+            : s,
+        ),
+        interviews.listSessions(),
+        (r) => interviews.putSession(r),
+      );
       const categories = new Set(repo.listQaCategories());
       for (const name of m.qaCategories) {
         if (!categories.has(name)) repo.createQaCategory(name);

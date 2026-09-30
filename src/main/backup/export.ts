@@ -1,3 +1,4 @@
+import { InterviewRepository } from "../interview/repository";
 import { ZipFile } from "yazl";
 import { createWriteStream, readFileSync } from "node:fs";
 import { rename, rm } from "node:fs/promises";
@@ -21,8 +22,12 @@ export async function exportLibrary(
         ]),
       ),
     ];
+  const interviews = new InterviewRepository(repo.db);
   const manifest: Manifest = {
-    formatVersion: 3,
+    formatVersion: 4,
+    interviewMaterials: interviews.listMaterials(),
+    interviewQuestions: interviews.listQuestions(),
+    interviewSessions: interviews.listSessions(),
     qaCategories: repo.listQaCategories(),
     qaRecords: repo.listQa(),
     createdAt: new Date().toISOString(),

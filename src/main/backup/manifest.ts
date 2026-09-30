@@ -1,3 +1,8 @@
+import {
+  materialSchema,
+  questionSchema,
+  sessionSchema,
+} from "../../shared/interview";
 import { z } from "zod";
 import { recordSchema, categoryNameSchema } from "../../shared/knowledge";
 const id = z.string().regex(/^[a-f0-9]{64}$/),
@@ -16,7 +21,15 @@ const asset = z.object({
   size: z.number().int().nonnegative(),
 });
 export const manifestSchema = z.object({
-  formatVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  formatVersion: z.union([
+    z.literal(1),
+    z.literal(2),
+    z.literal(3),
+    z.literal(4),
+  ]),
+  interviewMaterials: z.array(materialSchema).max(10000).default([]),
+  interviewQuestions: z.array(questionSchema).max(100000).default([]),
+  interviewSessions: z.array(sessionSchema).max(10000).default([]),
   qaCategories: z.array(categoryNameSchema).max(10000).default([]),
   qaRecords: z.array(recordSchema).max(100000).default([]),
   createdAt: time,

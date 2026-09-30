@@ -1,3 +1,5 @@
+import { validateSession } from "../interview/scoring";
+import type { Evidence } from "../../shared/knowledge";
 import { open, type ZipFile, type Entry } from "yauzl";
 import { createWriteStream, readFileSync } from "node:fs";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
@@ -115,7 +117,10 @@ export async function validateBackup(
         )
       )
         throw Error("问答引用无效");
-      for (const e of record.evidence) {
+      validateEvidence(record.evidence);
+    }
+    function validateEvidence(evidence: Evidence[]) {
+      for (const e of evidence) {
         const version = manifest.versions.find(
           (v) => v.id === e.versionId && v.articleId === e.articleId,
         );
@@ -132,6 +137,25 @@ export async function validateBackup(
           throw Error("问答引用与原文不一致");
       }
     }
+    for (const collection of [
+      manifest.interviewMaterials,
+      manifest.interviewQuestions,
+      manifest.interviewSessions,
+    ]) {
+      if (new Set(collection.map((r) => r.id)).size !== collection.length)
+        throw Error("面试备份标识重复");
+    }
+    for (const question of manifest.interviewQuestions)
+      validateEvidence(question.evidence);
+    for (const session of manifest.interviewSessions) {
+      validateSession(session);
+      for (const question of [
+        ...session.bankQueue,
+        ...session.turns.map((t) => t.question),
+      ])
+        validateEvidence(question.evidence);
+    }
+
     return {
       root,
       manifest,

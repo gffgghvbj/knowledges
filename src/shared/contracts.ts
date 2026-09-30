@@ -98,6 +98,8 @@ export interface CaptureTask {
   mode: "scan" | "capture" | "update";
 }
 export interface MergeReport {
+  interviewsAdded?: number;
+  interviewConflicts?: number;
   questionsAdded?: number;
   questionConflicts?: number;
   added: number;
@@ -107,6 +109,9 @@ export interface MergeReport {
   failed: number;
 }
 export interface BackupPreview {
+  interviewCount?: number;
+  materialCount?: number;
+  bankCount?: number;
   questionCount?: number;
   formatVersion: number;
   recordCount: number;
