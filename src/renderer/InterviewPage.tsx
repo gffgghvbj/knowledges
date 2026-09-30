@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { InterviewSessionView } from "../shared/interview";
 import { api } from "./api";
 import type { Run } from "./App";
@@ -20,6 +20,7 @@ export function InterviewPage({ run }: { run: Run }) {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [confirm, setConfirm] = useState<"finish" | "delete" | null>(null);
+  const drafts = useRef(new Map<string, string>());
   const refresh = async () => setSessions(await api.interviewSessions());
   useEffect(() => {
     let active = true;
@@ -38,7 +39,7 @@ export function InterviewPage({ run }: { run: Run }) {
     turn = current?.turns.at(-1),
     index = (current?.turns.length ?? 0) - 1;
   useEffect(() => {
-    setDraft(turn?.draft ?? "");
+    setDraft(drafts.current.get(`${selected}:${index}`) ?? turn?.draft ?? "");
     setError("");
   }, [selected, index]);
   const act = (fn: () => Promise<void>) =>
@@ -147,6 +148,7 @@ export function InterviewPage({ run }: { run: Run }) {
                           placeholder="用自己的语言说明思路、依据和取舍…"
                           onChange={(e) => {
                             const value = e.target.value;
+                            drafts.current.set(`${current.id}:${index}`, value);
                             setDraft(value);
                             void api
                               .saveInterviewDraft(current.id, index, value)

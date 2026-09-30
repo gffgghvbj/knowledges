@@ -12,7 +12,8 @@ async function checkZip(buffer: Buffer) {
       (error, zip) => {
         if (error || !zip) return reject(Error("Word 文件损坏或已加密"));
         let count = 0,
-          size = 0;
+          size = 0,
+          actualSize = 0;
         zip.on("error", reject);
         zip.on("end", resolve);
         zip.on("entry", (entry) => {
@@ -24,7 +25,25 @@ async function checkZip(buffer: Buffer) {
             zip.close();
             return reject(Error("Word 文档过大或已加密，请精简后导入"));
           }
-          zip.readEntry();
+          zip.openReadStream(entry, (error, stream) => {
+            if (error || !stream) {
+              zip.close();
+              return reject(Error("Word 文件损坏，请检查后导入"));
+            }
+            stream.on("error", () => {
+              zip.close();
+              reject(Error("Word 文件损坏，请检查后导入"));
+            });
+            stream.on("data", (chunk: Buffer) => {
+              actualSize += chunk.length;
+              if (actualSize > 50 * 1024 * 1024) {
+                stream.destroy();
+                zip.close();
+                reject(Error("Word 文档过大，请精简后导入"));
+              }
+            });
+            stream.on("end", () => zip.readEntry());
+          });
         });
         zip.readEntry();
       },
@@ -49,11 +68,9 @@ async function checkZip(buffer: Buffer) {
       useSystemFonts: true,
       disableFontFace: true,
       useWasm: false,
-      cMapUrl: pathToFileURL(join(__dirname, "cmaps") + "/").href,
+      cMapUrl: join(__dirname, "cmaps") + "/",
       cMapPacked: true,
-      standardFontDataUrl: pathToFileURL(
-        join(__dirname, "standard_fonts") + "/",
-      ).href,
+      standardFontDataUrl: join(__dirname, "standard_fonts") + "/",
     });
     try {
       const pdf = await task.promise;

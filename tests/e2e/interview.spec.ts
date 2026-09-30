@@ -69,7 +69,12 @@ test("formal mock interview saves drafts, hides feedback until completion and di
     await page.getByLabel("总题量").fill("2");
     await page.getByRole("button", { name: "开始面试", exact: true }).click();
     await expect(page.getByLabel("本题回答")).toBeVisible();
+    await page.clock.pauseAt(new Date());
     await page.getByLabel("本题回答").fill("Draft Redis answer");
+    await page.getByRole("button", { name: "新建面试", exact: true }).click();
+    await page.locator(".session-item").first().click();
+    await expect(page.getByLabel("本题回答")).toHaveValue("Draft Redis answer");
+    await page.clock.resume();
     await expect
       .poll(async () => {
         const s = await page.evaluate(() =>

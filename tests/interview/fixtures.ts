@@ -27,13 +27,15 @@ export async function docx(path: string, text: string) {
   z.end();
   await done;
 }
-export function pdf(text: string) {
-  const stream = `BT /F1 12 Tf 50 700 Td (${text}) Tj ET`;
+export function pdf(text: string, chinese = false) {
+  const stream = `BT /F1 12 Tf 50 700 Td ${chinese ? "<4e2d6587>" : `(${text})`} Tj ET`;
   const objs = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    chinese
+      ? "<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> >>] >>"
+      : "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
   ];
   let out = "%PDF-1.4\n";

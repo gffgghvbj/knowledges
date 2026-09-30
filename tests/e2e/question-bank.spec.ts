@@ -17,12 +17,16 @@ test("question bank saves manual questions and filters by knowledge and difficul
     await page.getByRole("button", { name: "题库", exact: true }).click();
     await page.getByLabel("题目内容").fill("What is AOF?");
     await page.getByLabel("参考答案").fill("A log of commands");
-    await page.getByLabel("知识点", {exact:true}).fill("Redis, persistence");
+    await page.getByLabel("知识点", { exact: true }).fill("Redis, persistence");
     await page.getByRole("button", { name: "保存题目", exact: true }).click();
     await expect(page.locator(".bank-item")).toHaveCount(1);
     await page.getByLabel("筛选知识点").fill("JVM");
     await expect(page.locator(".bank-item")).toHaveCount(0);
     await page.getByLabel("筛选知识点").fill("Redis");
+    await expect(page.locator(".bank-item")).toHaveCount(1);
+    await page.getByLabel("筛选类型").selectOption("project");
+    await expect(page.locator(".bank-item")).toHaveCount(0);
+    await page.getByLabel("筛选类型").selectOption("technical");
     await expect(page.locator(".bank-item")).toHaveCount(1);
     await page.locator(".bank-item").click();
     await expect(page.getByLabel("参考答案")).toHaveValue("A log of commands");

@@ -7,7 +7,7 @@ test("import PDF and DOCX locally, preview before save and edit confirmed materi
   const root = await mkdtemp(join(tmpdir(), "materials-ui-")),
     p = join(root, "resume.pdf"),
     d = join(root, "job.docx");
-  await writeFile(p, pdf("Java engineer"));
+  await writeFile(p, pdf("", true));
   await docx(d, "Redis developer");
   const app = await electron.launch({
     args: process.env.ELECTRON_APP_PATH ? [] : ["."],
@@ -18,7 +18,7 @@ test("import PDF and DOCX locally, preview before save and edit confirmed materi
     const page = await app.firstWindow();
     await page.getByRole("button", { name: "面试资料", exact: true }).click();
     for (const [file, kind, text] of [
-      [p, "resume", "Java engineer"],
+      [p, "resume", "中文"],
       [d, "jd", "Redis developer"],
     ]) {
       await app.evaluate(({ dialog }, path) => {

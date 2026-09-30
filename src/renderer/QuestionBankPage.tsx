@@ -22,6 +22,7 @@ export function QuestionBankPage({
     [points, setPoints] = useState(""),
     [filter, setFilter] = useState(""),
     [difficulty, setDifficulty] = useState(""),
+    [kind, setKind] = useState(""),
     [selected, setSelected] = useState<string[]>([]),
     [candidates, setCandidates] = useState<InterviewQuestion[]>([]),
     [accepted, setAccepted] = useState<string[]>([]),
@@ -51,7 +52,8 @@ export function QuestionBankPage({
           .join(" ")
           .toLowerCase()
           .includes(filter.toLowerCase())) &&
-      (!difficulty || q.difficulty === difficulty),
+      (!difficulty || q.difficulty === difficulty) &&
+      (!kind || q.kind === kind),
   );
   return (
     <>
@@ -88,6 +90,15 @@ export function QuestionBankPage({
             <option value="easy">基础</option>
             <option value="medium">进阶</option>
             <option value="hard">挑战</option>
+          </select>
+          <select
+            aria-label="筛选类型"
+            value={kind}
+            onChange={(e) => setKind(e.target.value)}
+          >
+            <option value="">全部类型</option>
+            <option value="technical">技术题</option>
+            <option value="project">项目题</option>
           </select>
           <p>{rows.length} 道题</p>
           {rows.map((q) => (
