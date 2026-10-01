@@ -4,7 +4,7 @@ import { InterviewMaterialsPage } from "./InterviewMaterialsPage";
 import { KnowledgePage } from "./KnowledgePage";
 import { ModelPage } from "./ModelPage";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { LibraryState } from "../shared/contracts";
+import type { LibraryState, StartupStatus } from "../shared/contracts";
 import { api } from "./api";
 import { SourcePage } from "./SourcePage";
 import { TaskPage } from "./TaskPage";
@@ -14,6 +14,10 @@ import "./style.css";
 const empty: LibraryState = { sources: [], articles: [], tasks: [], root: "" };
 export function App() {
   const [state, setState] = useState(empty),
+    [starting, setStarting] = useState(true),
+    [startup, setStartup] = useState<StartupStatus>({
+      message: "正在打开本地资料库…",
+    }),
     [view, setView] = useState("sources"),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -21,6 +25,7 @@ export function App() {
   const refresh = useCallback(async () => {
     const update = await api.stateUpdate(revision.current);
     revision.current = update.revision;
+    setStarting(false);
     if (Object.keys(update.patch).length)
       setState((old) => ({ ...old, ...update.patch }));
   }, []);
@@ -47,6 +52,23 @@ export function App() {
   useEffect(() => {
     void refresh().catch((e) => setError(String(e)));
   }, [refresh]);
+  useEffect(() => {
+    if (!starting) return;
+    let active = true;
+    const update = () =>
+      void api
+        .startupStatus()
+        .then((value) => {
+          if (active) setStartup(value);
+        })
+        .catch(() => {});
+    update();
+    const timer = setInterval(update, 250);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [starting]);
   const working =
     state.tasks.some((t) => ["queued", "running"].includes(t.state)) ||
     state.vectorIndex?.state === "running";
@@ -58,6 +80,34 @@ export function App() {
   const active = state.tasks.filter((t) =>
     ["queued", "running", "login-required"].includes(t.state),
   ).length;
+  if (starting)
+    return (
+      <section className="startup-screen" aria-label="启动状态">
+        <span className="brand-mark">拾</span>
+        <h1>拾知</h1>
+        <p role="status">{startup.message}</p>
+        {startup.error || error ? (
+          <p role="alert">
+            {startup.error ||
+              "无法加载资料库，请检查本地资料和模型设置后重启。"}
+          </p>
+        ) : (
+          <>
+            <progress
+              aria-label="资料检查进度"
+              max={startup.total || 1}
+              value={startup.total ? startup.completed : undefined}
+            />
+            {startup.total ? (
+              <small>
+                {startup.completed} / {startup.total} 篇
+              </small>
+            ) : null}
+            <small>首次升级可能需要整理资料，后续启动会复用已有索引。</small>
+          </>
+        )}
+      </section>
+    );
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -101,7 +151,7 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <span className="status-dot" /> 本地资料库 <small>v0.5.1</small>
+          <span className="status-dot" /> 本地资料库 <small>v0.5.2</small>
           <p>资料属于你，随时可以带走。</p>
         </div>
       </aside>

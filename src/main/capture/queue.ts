@@ -23,7 +23,7 @@ export class CaptureQueue {
     private transport: CaptureTransport,
     private interval = 1000,
   ) {
-    for (const task of repo.listTasks())
+    for (const task of repo.interruptedTasks())
       if (["running", "queued"].includes(task.state)) {
         task.state = "paused";
         for (const i of task.items)

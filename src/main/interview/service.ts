@@ -33,7 +33,7 @@ export class InterviewService {
     private model: typeof requestModel = requestModel,
     private timeoutMs = 120000,
   ) {
-    for (const session of repo.listSessions())
+    for (const session of repo.interruptedSessions())
       if (["preparing", "grading"].includes(session.status)) {
         session.status = "failed";
         session.error = "上次请求被中断，已保存进度，请重试";
@@ -322,12 +322,10 @@ export class InterviewService {
           dimensions: dimensionsFor(turn.question.kind),
           resume: s.resume,
           jd: s.jd,
-          history: s.turns
-            .slice(0, -1)
-            .map((t) => ({
-              question: t.question.prompt,
-              answer: t.answer?.slice(0, 4000),
-            })),
+          history: s.turns.slice(0, -1).map((t) => ({
+            question: t.question.prompt,
+            answer: t.answer?.slice(0, 4000),
+          })),
         });
         turn.grade = parseGrade(
           result.text,

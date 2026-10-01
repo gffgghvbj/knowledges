@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
+const ready = ipcRenderer.invoke("library:startupReady") as Promise<{
+  error?: string;
+}>;
 const names = [
+  "startupStatus",
   "qaSummaries",
   "qaRecord",
   "interviewSessionSummaries",
@@ -66,7 +70,13 @@ contextBridge.exposeInMainWorld(
   Object.fromEntries(
     names.map((name) => [
       name,
-      (...args: unknown[]) => ipcRenderer.invoke(`library:${name}`, ...args),
+      async (...args: unknown[]) => {
+        if (name !== "startupStatus") {
+          const result = await ready;
+          if (result.error) throw Error(result.error);
+        }
+        return ipcRenderer.invoke(`library:${name}`, ...args);
+      },
     ]),
   ),
 );

@@ -47,6 +47,7 @@ export async function importBackup(
           repo.resolvePath(f.path),
           readFileSync(safePath(backup.root, f.path)),
         );
+    const changedArticles = new Set<string>();
     repo.transaction(() => {
       const interviews = new InterviewRepository(repo.db);
       report.interviewsAdded = 0;
@@ -108,6 +109,7 @@ export async function importBackup(
         const existing = repo.getArticle(incoming.id);
         if (!existing) {
           repo.putArticle(incoming);
+          changedArticles.add(incoming.id);
           report.added++;
           continue;
         }
@@ -120,6 +122,7 @@ export async function importBackup(
         const delta = Date.parse(next.capturedAt) - Date.parse(old.capturedAt);
         if (delta > 0) {
           repo.putArticle(incoming);
+          changedArticles.add(incoming.id);
           report.updated++;
         } else if (delta === 0) {
           report.conflicts++;
@@ -152,8 +155,10 @@ export async function importBackup(
         report.questionsAdded++;
         if (existing) report.questionConflicts++;
       }
-      for (const a of repo.listArticles())
-        repo.index(a, repo.readArticle(a.id).markdown);
+      for (const id of changedArticles) {
+        const article = repo.getArticle(id)!;
+        repo.index(article, repo.readArticle(id).markdown);
+      }
     });
     repo.recoverPendingWrites();
     return report;

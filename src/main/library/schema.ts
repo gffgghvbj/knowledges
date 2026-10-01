@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 export function migrate(db: DatabaseSync) {
   const version = db.prepare("PRAGMA user_version").get()
     ?.user_version as number;
-  if (version > 5) throw Error("资料库来自更新版本，请升级应用后打开");
+  if (version > 6) throw Error("资料库来自更新版本，请升级应用后打开");
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
     CREATE TABLE IF NOT EXISTS sources (id TEXT PRIMARY KEY, data TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS articles (id TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -21,5 +21,10 @@ export function migrate(db: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS interview_materials (id TEXT PRIMARY KEY, data TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS interview_questions (id TEXT PRIMARY KEY, data TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS interview_sessions (id TEXT PRIMARY KEY, data TEXT NOT NULL);
-    PRAGMA user_version=5;`);
+    CREATE TABLE IF NOT EXISTS article_maintenance (
+      article_id TEXT PRIMARY KEY,
+      indexed_version TEXT, indexed_title TEXT, index_revision INTEGER, chunk_count INTEGER,
+      materialized_version TEXT, materialized_mtime REAL, materialized_size INTEGER
+    );
+    PRAGMA user_version=6;`);
 }

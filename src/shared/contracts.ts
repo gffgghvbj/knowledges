@@ -131,7 +131,14 @@ export interface LibraryState {
   tasks: CaptureTask[];
   root: string;
 }
+export interface StartupStatus {
+  message: string;
+  completed?: number;
+  total?: number;
+  error?: string;
+}
 export interface LibraryApi {
+  startupStatus(): Promise<StartupStatus>;
   qaSummaries(): Promise<QaSummary[]>;
   qaRecord(id: string): Promise<QaRecord | null>;
   interviewSessionSummaries(): Promise<SessionSummary[]>;

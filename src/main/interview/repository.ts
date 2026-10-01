@@ -127,6 +127,14 @@ export class InterviewRepository {
   deleteQuestion(id: string) {
     this.db.prepare("DELETE FROM interview_questions WHERE id=?").run(id);
   }
+  interruptedSessions(): InterviewSession[] {
+    return this.db
+      .prepare(
+        "SELECT data FROM interview_sessions WHERE json_extract(data,'$.status') IN ('preparing','grading')",
+      )
+      .all()
+      .map((row) => sessionSchema.parse(JSON.parse(row.data as string)));
+  }
   listSessions(): InterviewSession[] {
     return this.db
       .prepare("SELECT data FROM interview_sessions ORDER BY rowid DESC")

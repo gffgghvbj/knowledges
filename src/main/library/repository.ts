@@ -1,6 +1,6 @@
 import type { QaSummary } from "../../shared/lists";
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, dirname } from "node:path";
 import type {
   Source,
@@ -18,12 +18,19 @@ import { migrate } from "./schema";
 
 export class LibraryRepository {
   readonly db: DatabaseSync;
-  constructor(readonly root: string) {
+  constructor(
+    readonly root: string,
+    options: { deferMaintenance?: boolean } = {},
+  ) {
     mkdirSync(root, { recursive: true });
     this.db = new DatabaseSync(join(root, "library.sqlite"));
-    migrate(this.db);
-    this.recoverPendingWrites();
-    this.rebuildIndex();
+    try {
+      migrate(this.db);
+      if (!options.deferMaintenance) this.repairDerivedData();
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
   }
   close() {
     this.db.close();
@@ -208,10 +215,78 @@ export class LibraryRepository {
         .join(
           relative(dirname(target), asset.relativePath).split("\\").join("/"),
         );
-    atomicWrite(this.resolvePath(target), markdown);
+    const path = this.resolvePath(target);
+    atomicWrite(path, markdown);
+    const file = statSync(path);
+    this.db
+      .prepare(
+        `INSERT INTO article_maintenance (article_id,materialized_version,materialized_mtime,materialized_size)
+      VALUES (?,?,?,?) ON CONFLICT(article_id) DO UPDATE SET materialized_version=excluded.materialized_version,
+      materialized_mtime=excluded.materialized_mtime,materialized_size=excluded.materialized_size`,
+      )
+      .run(article.id, article.currentVersionId, file.mtimeMs, file.size);
+  }
+  private maintenanceRows() {
+    return this.db
+      .prepare(
+        `SELECT a.data, m.*,
+      coalesce(k.n,0) actual_chunks, coalesce(f.n,0) fts_rows, d.id doc_id
+      FROM articles a LEFT JOIN article_maintenance m ON a.id=m.article_id
+      LEFT JOIN (SELECT article_id,count(*) n FROM knowledge_chunks GROUP BY article_id) k ON k.article_id=a.id
+      LEFT JOIN (SELECT id,count(*) n FROM search_fts GROUP BY id) f ON f.id=a.id
+      LEFT JOIN search_docs d ON d.id=a.id`,
+      )
+      .all();
+  }
+  private repairRow(
+    row: ReturnType<LibraryRepository["maintenanceRows"]>[number],
+    filesOnly = false,
+  ) {
+    const article = JSON.parse(row.data as string) as Article;
+    let file: ReturnType<typeof statSync> | undefined;
+    try {
+      file = statSync(this.resolvePath(`articles/${article.id}/current.md`));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (
+      !file ||
+      row.materialized_version !== article.currentVersionId ||
+      row.materialized_mtime !== file.mtimeMs ||
+      row.materialized_size !== file.size
+    )
+      this.materialize(article);
+    if (
+      !filesOnly &&
+      (row.indexed_version !== article.currentVersionId ||
+        row.indexed_title !== article.title ||
+        row.index_revision !== 1 ||
+        row.chunk_count !== row.actual_chunks ||
+        row.fts_rows !== 1 ||
+        !row.doc_id)
+    )
+      this.transaction(() =>
+        this.index(article, this.readArticle(article.id).markdown),
+      );
+  }
+  repairDerivedData() {
+    for (const row of this.maintenanceRows()) this.repairRow(row);
+  }
+  async prepare(
+    progress: (completed: number, total: number) => void = () => {},
+  ) {
+    const rows = this.maintenanceRows();
+    progress(0, rows.length);
+    for (let i = 0; i < rows.length; i++) {
+      this.repairRow(rows[i]);
+      if ((i + 1) % 20 === 0 || i + 1 === rows.length) {
+        progress(i + 1, rows.length);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+    }
   }
   recoverPendingWrites() {
-    for (const a of this.listArticles()) this.materialize(a);
+    for (const row of this.maintenanceRows()) this.repairRow(row, true);
   }
   readArticle(id: string, versionId?: string) {
     const article = this.getArticle(id);
@@ -238,6 +313,12 @@ export class LibraryRepository {
     if (article) this.putArticle({ ...article, sourceStatus: status });
   }
   index(article: Article, text: string) {
+    this.db
+      .prepare(
+        `INSERT INTO article_maintenance (article_id) VALUES (?)
+      ON CONFLICT(article_id) DO UPDATE SET indexed_version=NULL`,
+      )
+      .run(article.id);
     indexKnowledge(this.db, article, this.readArticle(article.id).markdown);
     this.db
       .prepare("INSERT OR REPLACE INTO search_docs VALUES (?,?,?)")
@@ -246,6 +327,14 @@ export class LibraryRepository {
     this.db
       .prepare("INSERT INTO search_fts VALUES (?,?,?)")
       .run(article.id, article.title, text);
+    const chunks = this.db
+      .prepare("SELECT count(*) n FROM knowledge_chunks WHERE article_id=?")
+      .get(article.id)!.n;
+    this.db
+      .prepare(
+        `UPDATE article_maintenance SET indexed_version=?,indexed_title=?,index_revision=1,chunk_count=? WHERE article_id=?`,
+      )
+      .run(article.currentVersionId, article.title, chunks, article.id);
   }
   rebuildIndex() {
     this.transaction(() => {
@@ -326,6 +415,14 @@ export class LibraryRepository {
       )
       .all() as QaSummary[];
   }
+  pendingQa(): QaRecord[] {
+    return this.db
+      .prepare(
+        "SELECT data FROM qa_records WHERE json_extract(data,'$.status')='pending'",
+      )
+      .all()
+      .map((row) => JSON.parse(row.data as string));
+  }
   listQa(): QaRecord[] {
     return this.db
       .prepare("SELECT data FROM qa_records ORDER BY rowid DESC")
@@ -340,6 +437,14 @@ export class LibraryRepository {
   }
   getTask(id: string) {
     return this.get<CaptureTask>("tasks", id);
+  }
+  interruptedTasks(): CaptureTask[] {
+    return this.db
+      .prepare(
+        "SELECT data FROM tasks WHERE json_extract(data,'$.state') IN ('running','queued')",
+      )
+      .all()
+      .map((row) => JSON.parse(row.data as string));
   }
   listTasks() {
     return this.all<CaptureTask>("tasks").sort((a, b) =>

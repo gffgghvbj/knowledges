@@ -36,7 +36,7 @@ export class QaService {
     private timeoutMs = 120000,
     private retriever?: Retriever,
   ) {
-    for (const record of repo.listQa())
+    for (const record of repo.pendingQa())
       if (record.status === "pending")
         repo.putQa({
           ...record,
