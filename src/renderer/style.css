@@ -1319,3 +1319,29 @@ details {
   max-width: 600px;
   color: #a24435;
 }
+
+.review-filters {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.review-filters label {
+  flex: 1;
+  min-width: 150px;
+}
+.review-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.review-comparison .source-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1250px) {
+  .review-comparison {
+    grid-template-columns: 1fr;
+  }
+}

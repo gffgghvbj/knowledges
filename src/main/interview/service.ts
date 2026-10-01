@@ -1,3 +1,4 @@
+import { ReviewRepository } from "./reviews";
 import { randomInt, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
@@ -102,6 +103,36 @@ export class InterviewService {
     this.launch(session.id);
     return session.id;
   }
+  createReview(id: string, provider: "online" | "ollama"): string {
+    if (this.closed) throw Error("面试服务已关闭");
+    if (this.running.size >= 2) throw Error("最多同时处理两场面试，请稍候");
+    const item = new ReviewRepository(this.library.db).get(id);
+    if (!item) throw Error("复习题目已不存在");
+    if (item.attempts.length >= 10000)
+      throw Error("本题练习次数已达上限，请移出后重新加入复习");
+    const session: InterviewSession = {
+      id: randomUUID(),
+      reviewId: id,
+      createdAt: new Date().toISOString(),
+      config: {
+        ...item.config,
+        mode: "bank",
+        feedback: "practice",
+        provider,
+        questionCount: 1,
+      },
+      resume: item.resume,
+      jd: item.jd,
+      rulesVersion: INTERVIEW_RULES,
+      status: "awaiting-answer",
+      turns: [
+        { question: item.baseline.question, isFollowup: false, draft: "" },
+      ],
+      bankQueue: [item.baseline.question],
+    };
+    this.repo.putSession(session);
+    return session.id;
+  }
   saveDraft(id: string, index: number, text: string) {
     if (text.length > 12000) throw Error("回答最多 12000 字符");
     const s = this.repo.getSession(id);
@@ -197,7 +228,10 @@ export class InterviewService {
     const persist = () => {
       signal.throwIfAborted();
       if (this.closed || !this.repo.getSession(id)) throw Error("closed");
-      this.repo.putSession(s);
+      this.library.transaction(() => {
+        this.repo.putSession(s);
+        new ReviewRepository(this.library.db).recordAttempt(s);
+      });
     };
     const call = async (task: string, instruction: string, data: unknown) => {
       signal.throwIfAborted();

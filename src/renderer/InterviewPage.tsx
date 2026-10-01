@@ -16,9 +16,15 @@ const states = {
   failed: "需要重试",
   aborted: "已结束",
 };
-export function InterviewPage({ run }: { run: Run }) {
+export function InterviewPage({
+  run,
+  initialId = "",
+}: {
+  run: Run;
+  initialId?: string;
+}) {
   const [sessions, setSessions] = useState<SessionSummary[]>([]),
-    [selected, setSelected] = useState(""),
+    [selected, setSelected] = useState(initialId),
     [current, setCurrent] = useState<InterviewSessionView | null>(null),
     [page, setPage] = useState(0),
     [loading, setLoading] = useState(false),

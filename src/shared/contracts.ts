@@ -1,3 +1,4 @@
+import type { ReviewItem, ReviewSummary } from "./review";
 import type {
   QaSummary,
   MaterialSummary,
@@ -115,6 +116,7 @@ export interface MergeReport {
   failed: number;
 }
 export interface BackupPreview {
+  reviewCount?: number;
   interviewCount?: number;
   materialCount?: number;
   bankCount?: number;
@@ -138,6 +140,12 @@ export interface StartupStatus {
   error?: string;
 }
 export interface LibraryApi {
+  reviewSummaries(): Promise<ReviewSummary[]>;
+  reviewItem(id: string): Promise<ReviewItem | null>;
+  addReview(sessionId: string, index: number): Promise<string>;
+  setReviewState(id: string, state: ReviewItem["state"]): Promise<void>;
+  deleteReview(id: string): Promise<void>;
+  practiceReview(id: string, provider: "online" | "ollama"): Promise<string>;
   startupStatus(): Promise<StartupStatus>;
   qaSummaries(): Promise<QaSummary[]>;
   qaRecord(id: string): Promise<QaRecord | null>;

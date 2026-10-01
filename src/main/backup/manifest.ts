@@ -1,3 +1,4 @@
+import { reviewSchema } from "../../shared/review";
 import {
   materialSchema,
   questionSchema,
@@ -26,7 +27,9 @@ export const manifestSchema = z.object({
     z.literal(2),
     z.literal(3),
     z.literal(4),
+    z.literal(5),
   ]),
+  interviewReviews: z.array(reviewSchema).max(100000).default([]),
   interviewMaterials: z.array(materialSchema).max(10000).default([]),
   interviewQuestions: z.array(questionSchema).max(100000).default([]),
   interviewSessions: z.array(sessionSchema).max(10000).default([]),

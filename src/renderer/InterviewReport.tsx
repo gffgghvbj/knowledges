@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { InterviewSessionView, InterviewTurn } from "../shared/interview";
 import type { Evidence } from "../shared/knowledge";
 import type { LibraryApi } from "../shared/contracts";
@@ -110,6 +110,30 @@ export function InterviewReport({
   session: InterviewSessionView;
   run: Run;
 }) {
+  const [added, setAdded] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    let active = true;
+    void run(async () => {
+      const rows = await api.reviewSummaries();
+      if (active)
+        setAdded(
+          new Set(
+            session.turns.flatMap((_, i) =>
+              rows.some(
+                (r) =>
+                  (r.sourceSessionId === session.id && r.sourceIndex === i) ||
+                  r.id === session.reviewId,
+              )
+                ? [i]
+                : [],
+            ),
+          ),
+        );
+    });
+    return () => {
+      active = false;
+    };
+  }, [session.id, run]);
   const graded = session.turns.filter((t) => t.grade),
     answered = session.turns.filter((t) => t.answer),
     average = graded.length
@@ -160,6 +184,17 @@ export function InterviewReport({
             {turn.questionModel ?? "题库"}
           </small>
           <h3>{turn.question.prompt}</h3>
+          <button
+            disabled={added.has(i)}
+            onClick={() =>
+              void run(async () => {
+                await api.addReview(session.id, i);
+                setAdded((old) => new Set([...old, i]));
+              })
+            }
+          >
+            {added.has(i) ? "已加入复习" : "加入复习"}
+          </button>
           <h4>你的回答</h4>
           <p className="pre-wrap">
             {turn.answer ??

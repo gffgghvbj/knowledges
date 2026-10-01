@@ -3,6 +3,12 @@ const ready = ipcRenderer.invoke("library:startupReady") as Promise<{
   error?: string;
 }>;
 const names = [
+  "reviewSummaries",
+  "reviewItem",
+  "addReview",
+  "setReviewState",
+  "deleteReview",
+  "practiceReview",
   "startupStatus",
   "qaSummaries",
   "qaRecord",

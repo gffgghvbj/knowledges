@@ -111,6 +111,46 @@ test("formal mock interview saves drafts, hides feedback until completion and di
     await expect(page.locator(".interview-report")).toContainText(
       "PRIVATE ANALYSIS",
     );
+    await page
+      .getByRole("button", { name: "加入复习", exact: true })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("button", { name: "已加入复习", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "复习", exact: true }).click();
+    await page.locator(".session-item").first().click();
+    await expect(page.locator(".review-comparison")).toContainText(
+      "My Redis answer",
+    );
+    await page.getByLabel("知识点", { exact: true }).selectOption("Redis");
+    await page.getByRole("button", { name: "再练一次", exact: true }).click();
+    await expect(page.getByLabel("本题回答")).toHaveValue("");
+    await page
+      .getByLabel("本题回答")
+      .fill("Improved Redis answer with an example");
+    await page.getByRole("button", { name: "提交回答", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "面试复盘", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "复习", exact: true }).click();
+    await page.locator(".session-item").first().click();
+    await expect(page.locator(".review-comparison")).toContainText(
+      "My Redis answer",
+    );
+    await expect(page.locator(".review-comparison")).toContainText(
+      "Improved Redis answer with an example",
+    );
+    await page.getByRole("button", { name: "标记已掌握", exact: true }).click();
+    await page.getByLabel("掌握状态", { exact: true }).selectOption("mastered");
+    await expect(page.locator(".session-item")).toHaveCount(1);
+    await page.screenshot({
+      path: "test-results/review-comparison.png",
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: "移出复习", exact: true }).click();
+    await page.getByRole("button", { name: "确认移出", exact: true }).click();
+    await expect(page.locator(".session-item")).toHaveCount(0);
     await page.screenshot({
       path: "test-results/interview-report.png",
       fullPage: true,

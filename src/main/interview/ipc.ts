@@ -1,3 +1,5 @@
+import { ReviewRepository } from "./reviews";
+import { reviewStateSchema } from "../../shared/review";
 import { DraftBuffer } from "./drafts";
 import { InterviewService } from "./service";
 import { projectSession } from "./projection";
@@ -25,6 +27,25 @@ export function registerInterviewIpc(
   retriever: Retriever,
 ) {
   const repo = new InterviewRepository(library.db);
+  const reviews = new ReviewRepository(library.db);
+  handle("reviewSummaries", z.tuple([]), () => reviews.summaries());
+  handle("reviewItem", z.tuple([interviewId]), (id) => reviews.get(id) ?? null);
+  handle(
+    "addReview",
+    z.tuple([interviewId, z.number().int().min(0).max(19)]),
+    (id, index) => reviews.add(id, index),
+  );
+  handle(
+    "setReviewState",
+    z.tuple([interviewId, reviewStateSchema]),
+    (id, state) => reviews.setState(id, state),
+  );
+  handle("deleteReview", z.tuple([interviewId]), (id) => reviews.delete(id));
+  handle(
+    "practiceReview",
+    z.tuple([interviewId, providerSchema]),
+    (id, provider) => service.createReview(id, provider),
+  );
   const questions = new QuestionService(library, repo, settings);
   const service = new InterviewService(library, repo, settings, retriever);
   const drafts = new DraftBuffer((id, index, text) =>

@@ -82,6 +82,7 @@ export const turnSchema = z.object({
 });
 export type InterviewTurn = z.infer<typeof turnSchema>;
 export const sessionSchema = z.object({
+  reviewId: interviewId.optional(),
   id: interviewId,
   createdAt: z.string().datetime(),
   config: configSchema,

@@ -1,3 +1,4 @@
+import { ReviewPage } from "./ReviewPage";
 import { InterviewPage } from "./InterviewPage";
 import { QuestionBankPage } from "./QuestionBankPage";
 import { InterviewMaterialsPage } from "./InterviewMaterialsPage";
@@ -19,6 +20,7 @@ export function App() {
       message: "正在打开本地资料库…",
     }),
     [view, setView] = useState("sources"),
+    [interviewId, setInterviewId] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const revision = useRef<string | undefined>(undefined);
@@ -126,6 +128,7 @@ export function App() {
             ["tasks", "⇣", "采集任务"],
             ["qa", "✧", "知识库问答"],
             ["interview", "◇", "模拟面试"],
+            ["review", "↻", "复习"],
             ["bank", "▦", "题库"],
             ["materials", "▧", "面试资料"],
             ["models", "⚙", "模型设置"],
@@ -151,7 +154,7 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <span className="status-dot" /> 本地资料库 <small>v0.5.2</small>
+          <span className="status-dot" /> 本地资料库 <small>v0.6.0</small>
           <p>资料属于你，随时可以带走。</p>
         </div>
       </aside>
@@ -166,6 +169,7 @@ export function App() {
                   materials: "面试资料",
                   bank: "题库",
                   interview: "模拟面试",
+                  review: "复习",
                   models: "模型设置",
                   sources: "网站来源",
                   library: "资料库",
@@ -191,7 +195,18 @@ export function App() {
               onSettings={() => setView("models")}
             />
           )}
-          {view === "interview" && <InterviewPage run={run} />}
+          {view === "interview" && (
+            <InterviewPage run={run} initialId={interviewId} />
+          )}
+          {view === "review" && (
+            <ReviewPage
+              run={run}
+              onPractice={(id) => {
+                setInterviewId(id);
+                setView("interview");
+              }}
+            />
+          )}
           {view === "bank" && <QuestionBankPage run={run} state={state} />}
           {view === "materials" && <InterviewMaterialsPage run={run} />}
           {view === "models" && <ModelPage run={run} state={state} />}

@@ -1,3 +1,4 @@
+import { ReviewRepository } from "../interview/reviews";
 import { InterviewRepository } from "../interview/repository";
 import { ZipFile } from "yazl";
 import { createWriteStream, readFileSync } from "node:fs";
@@ -24,7 +25,8 @@ export async function exportLibrary(
     ];
   const interviews = new InterviewRepository(repo.db);
   const manifest: Manifest = {
-    formatVersion: 4,
+    formatVersion: 5,
+    interviewReviews: new ReviewRepository(repo.db).list(),
     interviewMaterials: interviews.listMaterials(),
     interviewQuestions: interviews.listQuestions(),
     interviewSessions: interviews.listSessions(),

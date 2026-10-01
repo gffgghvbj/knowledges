@@ -1,3 +1,4 @@
+import { ReviewRepository } from "../interview/reviews";
 import { InterviewRepository } from "../interview/repository";
 import { recordSchema } from "../../shared/knowledge";
 import { existsSync, readFileSync } from "node:fs";
@@ -10,6 +11,7 @@ export async function inspectBackup(path: string): Promise<BackupPreview> {
   try {
     return {
       formatVersion: backup.manifest.formatVersion,
+      reviewCount: backup.manifest.interviewReviews.length,
       interviewCount: backup.manifest.interviewSessions.length,
       materialCount: backup.manifest.interviewMaterials.length,
       bankCount: backup.manifest.interviewQuestions.length,
@@ -58,18 +60,26 @@ export async function importBackup(
         put: (row: T) => void,
       ) => {
         const byId = new Map(existing.map((r) => [r.id, r]));
+        const mapping = new Map<string, string>();
         for (const row of incoming) {
           const old = byId.get(row.id),
             canonical = JSON.stringify(row);
+          mapping.set(row.id, row.id);
           if (old && JSON.stringify(old) === canonical) continue;
           const target = old ? { ...row, id: hash(row.id + canonical) } : row;
+          mapping.set(row.id, target.id);
           if (byId.has(target.id)) continue;
           put(target);
           byId.set(target.id, target);
           report.interviewsAdded!++;
           if (old) report.interviewConflicts!++;
         }
+        return mapping;
       };
+      const reviews = new ReviewRepository(repo.db);
+      const reviewIds = mergeRecords(m.interviewReviews, reviews.list(), (r) =>
+        reviews.put(r),
+      );
       mergeRecords(m.interviewMaterials, interviews.listMaterials(), (r) =>
         interviews.putMaterial(r),
       );
@@ -77,15 +87,21 @@ export async function importBackup(
         interviews.putQuestion(r),
       );
       mergeRecords(
-        m.interviewSessions.map((s) =>
-          ["preparing", "grading"].includes(s.status)
-            ? {
-                ...s,
-                status: "failed" as const,
-                error: "导入的未完成面试，进度已保存，请重试",
-              }
-            : s,
-        ),
+        m.interviewSessions
+          .map((s) =>
+            s.reviewId
+              ? { ...s, reviewId: reviewIds.get(s.reviewId) ?? s.reviewId }
+              : s,
+          )
+          .map((s) =>
+            ["preparing", "grading"].includes(s.status)
+              ? {
+                  ...s,
+                  status: "failed" as const,
+                  error: "导入的未完成面试，进度已保存，请重试",
+                }
+              : s,
+          ),
         interviews.listSessions(),
         (r) => interviews.putSession(r),
       );

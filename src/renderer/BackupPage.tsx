@@ -36,7 +36,8 @@ export function BackupPage({
           <h3>导出资料库</h3>
           <p>
             包含文章、图片、历史版本、问答、题库、简历/JD
-            文本及面试记录。网站登录状态、模型设置和 API Key 不会放入备份。
+            文本、面试记录及复习记录。网站登录状态、模型设置和 API Key
+            不会放入备份。
           </p>
           <button
             className="primary"
@@ -74,6 +75,7 @@ export function BackupPage({
                 {pending.preview.materialCount ?? 0} 份面试资料 ·{" "}
                 {pending.preview.bankCount ?? 0} 道题 ·{" "}
                 {pending.preview.interviewCount ?? 0} 场面试 ·{" "}
+                {pending.preview.reviewCount ?? 0} 道复习题 ·{" "}
                 {(pending.preview.totalBytes / 1024 / 1024).toFixed(1)} MB
               </p>
               <button

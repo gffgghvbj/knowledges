@@ -1,4 +1,4 @@
-import { validateSession } from "../interview/scoring";
+import { validateSession, validateGrade } from "../interview/scoring";
 import type { Evidence } from "../../shared/knowledge";
 import { open, type ZipFile, type Entry } from "yauzl";
 import { createWriteStream, readFileSync } from "node:fs";
@@ -138,6 +138,7 @@ export async function validateBackup(
       }
     }
     for (const collection of [
+      manifest.interviewReviews,
       manifest.interviewMaterials,
       manifest.interviewQuestions,
       manifest.interviewSessions,
@@ -156,6 +157,37 @@ export async function validateBackup(
         validateEvidence(question.evidence);
     }
 
+    for (const review of manifest.interviewReviews) {
+      if (
+        review.config.scope === "job" &&
+        (review.resume?.kind !== "resume" || review.jd?.kind !== "jd")
+      )
+        throw Error("复习记录缺少岗位资料快照");
+      if (
+        new Set(review.attempts.map((a) => a.sessionId)).size !==
+        review.attempts.length
+      )
+        throw Error("复习作答重复");
+      for (const turn of [
+        review.baseline,
+        ...review.attempts.map((a) => a.turn),
+      ]) {
+        validateEvidence(turn.question.evidence);
+        if (turn.grade) {
+          if (!turn.answer) throw Error("复习评分缺少回答");
+          validateGrade(turn.grade, turn.question.kind, turn.question.evidence);
+        }
+      }
+      if (
+        review.attempts.some(
+          (a) =>
+            !a.turn.grade ||
+            JSON.stringify(a.turn.question) !==
+              JSON.stringify(review.baseline.question),
+        )
+      )
+        throw Error("复习作答与题目不一致");
+    }
     return {
       root,
       manifest,
