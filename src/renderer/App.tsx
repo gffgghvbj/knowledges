@@ -3,7 +3,7 @@ import { QuestionBankPage } from "./QuestionBankPage";
 import { InterviewMaterialsPage } from "./InterviewMaterialsPage";
 import { KnowledgePage } from "./KnowledgePage";
 import { ModelPage } from "./ModelPage";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LibraryState } from "../shared/contracts";
 import { api } from "./api";
 import { SourcePage } from "./SourcePage";
@@ -17,29 +17,44 @@ export function App() {
     [view, setView] = useState("sources"),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
-  const refresh = async () => setState(await api.state());
-  const run = async (action: () => Promise<unknown>) => {
-    setBusy(true);
-    setError("");
-    try {
-      await action();
-      await refresh();
-    } catch (e) {
-      setError(
-        String(e).replace(
-          /^Error: (?:Error invoking remote method '[^']+': Error: )?/,
-          "",
-        ),
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
+  const revision = useRef<string | undefined>(undefined);
+  const refresh = useCallback(async () => {
+    const update = await api.stateUpdate(revision.current);
+    revision.current = update.revision;
+    if (Object.keys(update.patch).length)
+      setState((old) => ({ ...old, ...update.patch }));
+  }, []);
+  const run = useCallback(
+    async (action: () => Promise<unknown>) => {
+      setBusy(true);
+      setError("");
+      try {
+        await action();
+        await refresh();
+      } catch (e) {
+        setError(
+          String(e).replace(
+            /^Error: (?:Error invoking remote method '[^']+': Error: )?/,
+            "",
+          ),
+        );
+      } finally {
+        setBusy(false);
+      }
+    },
+    [refresh],
+  );
   useEffect(() => {
     void refresh().catch((e) => setError(String(e)));
+  }, [refresh]);
+  const working =
+    state.tasks.some((t) => ["queued", "running"].includes(t.state)) ||
+    state.vectorIndex?.state === "running";
+  useEffect(() => {
+    if (!working) return;
     const interval = setInterval(() => void refresh().catch(() => {}), 1200);
     return () => clearInterval(interval);
-  }, []);
+  }, [working, refresh]);
   const active = state.tasks.filter((t) =>
     ["queued", "running", "login-required"].includes(t.state),
   ).length;
@@ -70,7 +85,12 @@ export function App() {
               key={id}
               aria-label={label}
               className={view === id ? "nav-item selected" : "nav-item"}
-              onClick={() => setView(id)}
+              onClick={() => {
+                void api
+                  .flushInterviewDrafts()
+                  .then(() => setView(id))
+                  .catch(() => setError("草稿尚未保存，请检查磁盘后重试"));
+              }}
             >
               <span className="nav-icon">{icon}</span>
               {label}
@@ -81,7 +101,7 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <span className="status-dot" /> 本地资料库 <small>v0.5</small>
+          <span className="status-dot" /> 本地资料库 <small>v0.5.1</small>
           <p>资料属于你，随时可以带走。</p>
         </div>
       </aside>

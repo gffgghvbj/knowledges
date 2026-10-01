@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   LibraryState,
   Article,
@@ -9,6 +9,7 @@ import { api } from "./api";
 import { Reader } from "./components/Reader";
 export function LibraryPage({ state, run }: { state: LibraryState; run: Run }) {
   const [query, setQuery] = useState(""),
+    [composing, setComposing] = useState(false),
     [source, setSource] = useState(""),
     [section, setSection] = useState(""),
     [page, setPage] = useState(0),
@@ -21,6 +22,7 @@ export function LibraryPage({ state, run }: { state: LibraryState; run: Run }) {
     > | null>(null),
     [versions, setVersions] = useState<ArticleVersion[]>([]);
   useEffect(() => {
+    if (composing) return;
     let alive = true;
     const timer = setTimeout(() => {
       void api
@@ -34,20 +36,23 @@ export function LibraryPage({ state, run }: { state: LibraryState; run: Run }) {
       alive = false;
       clearTimeout(timer);
     };
-  }, [query, source, section, page, state.articles.length]);
+  }, [query, source, section, page, state.articles, composing]);
   const select = (id: string, version?: string) =>
     run(async () => {
       setValue(await api.read(id, version));
       setVersions(await api.versions(id));
     });
-  const sections = [
-    ...new Set(
-      state.articles
-        .filter((a) => !source || a.sourceId === source)
-        .map((a) => a.sectionPath[0])
-        .filter(Boolean),
-    ),
-  ];
+  const sections = useMemo(
+    () => [
+      ...new Set(
+        state.articles
+          .filter((a) => !source || a.sourceId === source)
+          .map((a) => a.sectionPath[0])
+          .filter(Boolean),
+      ),
+    ],
+    [state.articles, source],
+  );
   return (
     <>
       <div className="page-heading compact">
@@ -60,6 +65,8 @@ export function LibraryPage({ state, run }: { state: LibraryState; run: Run }) {
       </div>
       <div className="library-toolbar">
         <input
+          onCompositionStart={() => setComposing(true)}
+          onCompositionEnd={() => setComposing(false)}
           placeholder="搜索标题或正文…"
           value={query}
           onChange={(e) => {

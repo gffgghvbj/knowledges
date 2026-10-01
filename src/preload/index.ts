@@ -1,5 +1,14 @@
 import { contextBridge, ipcRenderer } from "electron";
 const names = [
+  "qaSummaries",
+  "qaRecord",
+  "interviewSessionSummaries",
+  "interviewSession",
+  "interviewMaterialSummaries",
+  "interviewMaterial",
+  "interviewQuestionSummaries",
+  "interviewQuestion",
+  "flushInterviewDrafts",
   "interviewSessions",
   "createInterview",
   "saveInterviewDraft",
@@ -35,6 +44,7 @@ const names = [
   "cancelQa",
   "getStatus",
   "state",
+  "stateUpdate",
   "addSource",
   "login",
   "scan",

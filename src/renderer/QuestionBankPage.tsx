@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import type { QuestionSummary } from "../shared/lists";
+import { Pagination } from "./components/Pagination";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import type { Run } from "./App";
 import type { LibraryState } from "../shared/contracts";
@@ -17,8 +19,11 @@ export function QuestionBankPage({
   state: LibraryState;
   run: Run;
 }) {
-  const [items, setItems] = useState<InterviewQuestion[]>([]),
+  const [items, setItems] = useState<QuestionSummary[]>([]),
     [form, setForm] = useState<QuestionInput>(blank),
+    [detail, setDetail] = useState<InterviewQuestion | null>(null),
+    [page, setPage] = useState(0),
+    [articlePage, setArticlePage] = useState(0),
     [points, setPoints] = useState(""),
     [filter, setFilter] = useState(""),
     [difficulty, setDifficulty] = useState(""),
@@ -31,7 +36,7 @@ export function QuestionBankPage({
     [busy, setBusy] = useState(false),
     [deleting, setDeleting] = useState(false),
     [message, setMessage] = useState("");
-  const refresh = async () => setItems(await api.interviewQuestions());
+  const refresh = async () => setItems(await api.interviewQuestionSummaries());
   useEffect(() => {
     void run(refresh);
   }, []);
@@ -45,16 +50,22 @@ export function QuestionBankPage({
         setBusy(false);
       }
     });
-  const rows = items.filter(
-    (q) =>
-      (!filter ||
-        q.knowledgePoints
-          .join(" ")
-          .toLowerCase()
-          .includes(filter.toLowerCase())) &&
-      (!difficulty || q.difficulty === difficulty) &&
-      (!kind || q.kind === kind),
+  const deferredFilter = useDeferredValue(filter);
+  const rows = useMemo(
+    () =>
+      items.filter(
+        (q) =>
+          (!deferredFilter ||
+            q.knowledgePoints
+              .join(" ")
+              .toLowerCase()
+              .includes(deferredFilter.toLowerCase())) &&
+          (!difficulty || q.difficulty === difficulty) &&
+          (!kind || q.kind === kind),
+      ),
+    [items, deferredFilter, difficulty, kind],
   );
+  const safePage = Math.min(page, Math.max(0, Math.ceil(rows.length / 50) - 1));
   return (
     <>
       <div className="page-heading">
@@ -79,12 +90,18 @@ export function QuestionBankPage({
             aria-label="筛选知识点"
             placeholder="筛选知识点"
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setPage(0);
+            }}
           />
           <select
             aria-label="筛选难度"
             value={difficulty}
-            onChange={(e) => setDifficulty(e.target.value)}
+            onChange={(e) => {
+              setDifficulty(e.target.value);
+              setPage(0);
+            }}
           >
             <option value="">全部难度</option>
             <option value="easy">基础</option>
@@ -94,21 +111,30 @@ export function QuestionBankPage({
           <select
             aria-label="筛选类型"
             value={kind}
-            onChange={(e) => setKind(e.target.value)}
+            onChange={(e) => {
+              setKind(e.target.value);
+              setPage(0);
+            }}
           >
             <option value="">全部类型</option>
             <option value="technical">技术题</option>
             <option value="project">项目题</option>
           </select>
           <p>{rows.length} 道题</p>
-          {rows.map((q) => (
+          {rows.slice(safePage * 50, (safePage + 1) * 50).map((q) => (
             <button
               key={q.id}
               className="article-item bank-item"
-              onClick={() => {
-                setForm(q);
-                setPoints(q.knowledgePoints.join(", "));
-              }}
+              disabled={busy}
+              onClick={() =>
+                void act(async () => {
+                  const record = await api.interviewQuestion(q.id);
+                  if (!record) throw Error("题目已不存在");
+                  setDetail(record);
+                  setForm(record);
+                  setPoints(record.knowledgePoints.join(", "));
+                })
+              }
             >
               <strong>{q.prompt}</strong>
               <small>
@@ -117,6 +143,7 @@ export function QuestionBankPage({
               </small>
             </button>
           ))}
+          <Pagination page={safePage} total={rows.length} onChange={setPage} />
         </aside>
         <form
           className="source-card interview-form"
@@ -205,21 +232,20 @@ export function QuestionBankPage({
             </label>
           </div>
           {form.id &&
-            items
-              .find((q) => q.id === form.id)
-              ?.evidence.map((e) => (
-                <small key={e.id}>
-                  依据：{e.title} · 第 {e.lineStart}–{e.lineEnd} 行{" "}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void run(() => api.openArticle(e.articleId, e.versionId))
-                    }
-                  >
-                    打开引用版本
-                  </button>
-                </small>
-              ))}
+            detail?.id === form.id &&
+            detail.evidence.map((e) => (
+              <small key={e.id}>
+                依据：{e.title} · 第 {e.lineStart}–{e.lineEnd} 行{" "}
+                <button
+                  type="button"
+                  onClick={() =>
+                    void run(() => api.openArticle(e.articleId, e.versionId))
+                  }
+                >
+                  打开引用版本
+                </button>
+              </small>
+            ))}
           <small>手工编辑后的答案会标为手工录入，不代表已经过原文验证。</small>
           <div className="card-actions">
             <button className="primary" disabled={busy}>
@@ -244,26 +270,33 @@ export function QuestionBankPage({
           选择最多 10 篇文章，每次生成 1–5
           题；核对后勾选入库。在线模型会接收选定文章的相关片段。
         </p>
+        <Pagination
+          page={articlePage}
+          total={state.articles.length}
+          onChange={setArticlePage}
+        />
         <div className="article-picker">
-          {state.articles.map((a) => (
-            <label key={a.id}>
-              <input
-                type="checkbox"
-                checked={selected.includes(a.id)}
-                disabled={
-                  busy || (!selected.includes(a.id) && selected.length >= 10)
-                }
-                onChange={(e) =>
-                  setSelected(
-                    e.target.checked
-                      ? [...selected, a.id]
-                      : selected.filter((id) => id !== a.id),
-                  )
-                }
-              />
-              {a.title}
-            </label>
-          ))}
+          {state.articles
+            .slice(articlePage * 50, (articlePage + 1) * 50)
+            .map((a) => (
+              <label key={a.id}>
+                <input
+                  type="checkbox"
+                  checked={selected.includes(a.id)}
+                  disabled={
+                    busy || (!selected.includes(a.id) && selected.length >= 10)
+                  }
+                  onChange={(e) =>
+                    setSelected(
+                      e.target.checked
+                        ? [...selected, a.id]
+                        : selected.filter((id) => id !== a.id),
+                    )
+                  }
+                />
+                {a.title}
+              </label>
+            ))}
         </div>
         <div className="card-actions">
           <select

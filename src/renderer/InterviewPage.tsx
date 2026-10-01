@@ -1,3 +1,6 @@
+import type { SessionSummary } from "../shared/lists";
+import { Pagination } from "./components/Pagination";
+import { InterviewAnswer } from "./components/InterviewAnswer";
 import { useEffect, useRef, useState } from "react";
 import type { InterviewSessionView } from "../shared/interview";
 import { api } from "./api";
@@ -14,34 +17,85 @@ const states = {
   aborted: "已结束",
 };
 export function InterviewPage({ run }: { run: Run }) {
-  const [sessions, setSessions] = useState<InterviewSessionView[]>([]),
+  const [sessions, setSessions] = useState<SessionSummary[]>([]),
     [selected, setSelected] = useState(""),
-    [draft, setDraft] = useState(""),
+    [current, setCurrent] = useState<InterviewSessionView | null>(null),
+    [page, setPage] = useState(0),
+    [loading, setLoading] = useState(false),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
     [confirm, setConfirm] = useState<"finish" | "delete" | null>(null);
   const drafts = useRef(new Map<string, string>());
-  const refresh = async () => setSessions(await api.interviewSessions());
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const refresh = async () => {
+    setSessions(await api.interviewSessionSummaries());
+    const id = selectedRef.current;
+    if (id) {
+      const detail = await api.interviewSession(id);
+      if (selectedRef.current === id) setCurrent(detail);
+    }
+  };
   useEffect(() => {
+    void run(refresh);
+  }, []);
+  const working = sessions.some((s) =>
+    ["preparing", "grading"].includes(s.status),
+  );
+  useEffect(() => {
+    if (!working) return;
     let active = true;
-    const load = async () => {
-      const rows = await api.interviewSessions();
-      if (active) setSessions(rows);
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const rows = await api.interviewSessionSummaries();
+        if (!active) return;
+        const id = selectedRef.current;
+        const previous = sessions.find((s) => s.id === id);
+        if (
+          id &&
+          previous &&
+          ["preparing", "grading"].includes(previous.status)
+        ) {
+          const detail = await api.interviewSession(id);
+          if (active && selectedRef.current === id) setCurrent(detail);
+        }
+        if (active) setSessions(rows);
+      } finally {
+        if (active) timer = setTimeout(() => void poll().catch(() => {}), 1000);
+      }
     };
-    void run(load);
-    const timer = setInterval(() => void load().catch(() => {}), 1000);
+    timer = setTimeout(() => void poll().catch(() => {}), 1000);
     return () => {
       active = false;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
-  }, []);
-  const current = sessions.find((s) => s.id === selected),
-    turn = current?.turns.at(-1),
-    index = (current?.turns.length ?? 0) - 1;
+  }, [working, selected, current?.status]);
   useEffect(() => {
-    setDraft(drafts.current.get(`${selected}:${index}`) ?? turn?.draft ?? "");
-    setError("");
-  }, [selected, index]);
+    let active = true;
+    if (!selected) {
+      setCurrent(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    void run(async () => {
+      try {
+        const detail = await api.interviewSession(selected);
+        if (active) setCurrent(detail);
+      } finally {
+        if (active) setLoading(false);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [selected]);
+  const safePage = Math.min(
+    page,
+    Math.max(0, Math.ceil(sessions.length / 50) - 1),
+  );
+  const turn = current?.turns.at(-1),
+    index = (current?.turns.length ?? 0) - 1;
   const act = (fn: () => Promise<void>) =>
     run(async () => {
       setBusy(true);
@@ -68,7 +122,7 @@ export function InterviewPage({ run }: { run: Run }) {
         <aside className="source-card">
           <h3>面试记录</h3>
           {!sessions.length && <p>完成的面试和进行中的进度会保存在这里。</p>}
-          {sessions.map((s) => (
+          {sessions.slice(safePage * 50, (safePage + 1) * 50).map((s) => (
             <button
               key={s.id}
               className={
@@ -77,21 +131,23 @@ export function InterviewPage({ run }: { run: Run }) {
               }
               onClick={() => setSelected(s.id)}
             >
-              <strong>
-                {s.config.scope === "job"
-                  ? (s.jd?.name ?? "岗位面试")
-                  : s.config.topic || "专题练习"}
-              </strong>
+              <strong>{s.title}</strong>
               <small>
-                {states[s.status]} · {s.turns.filter((t) => t.answer).length}/
-                {s.config.questionCount} 题
+                {states[s.status]} · {s.answered}/{s.questionCount} 题
               </small>
               <small>{new Date(s.createdAt).toLocaleString()}</small>
             </button>
           ))}
+          <Pagination
+            page={safePage}
+            total={sessions.length}
+            onChange={setPage}
+          />
         </aside>
         <div>
-          {!current ? (
+          {loading ? (
+            <p role="status">正在读取面试…</p>
+          ) : !current ? (
             <InterviewSetup
               run={run}
               onCreated={async (id) => {
@@ -137,41 +193,19 @@ export function InterviewPage({ run }: { run: Run }) {
                     <p role="status">正在结合资料准备下一道题…</p>
                   )}
                   {current.status === "awaiting-answer" && (
-                    <>
-                      <label>
-                        本题回答
-                        <textarea
-                          aria-label="本题回答"
-                          value={draft}
-                          rows={10}
-                          maxLength={12000}
-                          placeholder="用自己的语言说明思路、依据和取舍…"
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            drafts.current.set(`${current.id}:${index}`, value);
-                            setDraft(value);
-                            void api
-                              .saveInterviewDraft(current.id, index, value)
-                              .catch(() => setError("草稿保存失败，请重试"));
-                          }}
-                        />
-                      </label>
-                      <small>
-                        {draft.length} / 12000 字符 · 草稿自动保存在本机
-                      </small>
-                      {error && <p role="alert">{error}</p>}
-                      <button
-                        className="primary"
-                        disabled={busy || !draft.trim()}
-                        onClick={() =>
-                          void act(() =>
-                            api.submitInterviewAnswer(current.id, index, draft),
-                          )
-                        }
-                      >
-                        提交回答
-                      </button>
-                    </>
+                    <InterviewAnswer
+                      key={`${current.id}:${index}`}
+                      id={current.id}
+                      index={index}
+                      initial={turn?.draft ?? ""}
+                      cache={drafts.current}
+                      busy={busy}
+                      submit={(text) =>
+                        act(() =>
+                          api.submitInterviewAnswer(current.id, index, text),
+                        )
+                      }
+                    />
                   )}
                   {turn?.answer && current.status !== "awaiting-answer" && (
                     <>

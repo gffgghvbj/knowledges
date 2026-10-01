@@ -1,15 +1,18 @@
+import type { MaterialSummary } from "../shared/lists";
+import { Pagination } from "./components/Pagination";
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import type { Run } from "./App";
 import type { InterviewMaterial, MaterialInput } from "../shared/interview";
 const empty: MaterialInput = { name: "", kind: "resume", text: "" };
 export function InterviewMaterialsPage({ run }: { run: Run }) {
-  const [items, setItems] = useState<InterviewMaterial[]>([]),
+  const [items, setItems] = useState<MaterialSummary[]>([]),
+    [page, setPage] = useState(0),
     [form, setForm] = useState<MaterialInput>(empty),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState(""),
     [deleting, setDeleting] = useState<string | null>(null);
-  const refresh = async () => setItems(await api.interviewMaterials());
+  const refresh = async () => setItems(await api.interviewMaterialSummaries());
   useEffect(() => {
     void run(refresh);
   }, []);
@@ -23,6 +26,10 @@ export function InterviewMaterialsPage({ run }: { run: Run }) {
         setBusy(false);
       }
     });
+  const safePage = Math.min(
+    page,
+    Math.max(0, Math.ceil(items.length / 50) - 1),
+  );
   return (
     <>
       <div className="page-heading">
@@ -38,24 +45,29 @@ export function InterviewMaterialsPage({ run }: { run: Run }) {
       <div className="interview-grid">
         <aside className="source-card">
           <h3>已保存资料</h3>
-          {items.map((m) => (
+          {items.slice(safePage * 50, (safePage + 1) * 50).map((m) => (
             <button
               className="article-item material-item"
               key={m.id}
               disabled={busy}
-              onClick={() => {
-                setForm(m);
-                setMessage("");
-              }}
+              onClick={() =>
+                void act(async () => {
+                  const record = await api.interviewMaterial(m.id);
+                  if (!record) throw Error("资料已不存在");
+                  setForm(record);
+                  setMessage("");
+                })
+              }
             >
               <strong>{m.name}</strong>
               <small>
-                {m.kind === "resume" ? "简历" : "职位描述"} · {m.text.length}{" "}
+                {m.kind === "resume" ? "简历" : "职位描述"} · {m.characters}{" "}
                 字符
               </small>
             </button>
           ))}
           {!items.length && <p>保存后的简历和 JD 会出现在这里。</p>}
+          <Pagination page={safePage} total={items.length} onChange={setPage} />
         </aside>
         <form
           className="source-card interview-form"

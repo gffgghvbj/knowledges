@@ -1,3 +1,4 @@
+import { DraftBuffer } from "./drafts";
 import { InterviewService } from "./service";
 import { projectSession } from "./projection";
 import { configSchema } from "../../shared/interview";
@@ -26,8 +27,48 @@ export function registerInterviewIpc(
   const repo = new InterviewRepository(library.db);
   const questions = new QuestionService(library, repo, settings);
   const service = new InterviewService(library, repo, settings, retriever);
-  handle("interviewSessions", z.tuple([]), () =>
-    repo.listSessions().map(projectSession),
+  const drafts = new DraftBuffer((id, index, text) =>
+    service.saveDraft(id, index, text),
+  );
+  win.on("close", (event) => {
+    try {
+      drafts.flush();
+    } catch {
+      event.preventDefault();
+      dialog.showErrorBox(
+        "草稿尚未保存",
+        "无法写入资料库，请检查磁盘后再关闭。",
+      );
+    }
+  });
+  handle("flushInterviewDrafts", z.tuple([]), () => drafts.flush());
+  handle("interviewSessions", z.tuple([]), () => {
+    drafts.flush();
+    return repo.listSessions().map(projectSession);
+  });
+  handle("interviewSessionSummaries", z.tuple([]), () =>
+    repo.sessionSummaries(),
+  );
+  handle("interviewSession", z.tuple([interviewId]), (id) => {
+    drafts.flush();
+    const session = repo.getSession(id);
+    return session ? projectSession(session) : null;
+  });
+  handle("interviewMaterialSummaries", z.tuple([]), () =>
+    repo.materialSummaries(),
+  );
+  handle(
+    "interviewMaterial",
+    z.tuple([interviewId]),
+    (id) => repo.getMaterial(id) ?? null,
+  );
+  handle("interviewQuestionSummaries", z.tuple([]), () =>
+    repo.questionSummaries(),
+  );
+  handle(
+    "interviewQuestion",
+    z.tuple([interviewId]),
+    (id) => repo.getQuestion(id) ?? null,
   );
   handle("createInterview", z.tuple([configSchema]), (config) =>
     service.create(config),
@@ -39,7 +80,7 @@ export function registerInterviewIpc(
       z.number().int().min(0).max(19),
       z.string().max(12000),
     ]),
-    (id, index, text) => service.saveDraft(id, index, text),
+    (id, index, text) => drafts.set(id, index, text),
   );
   handle(
     "submitInterviewAnswer",
@@ -48,12 +89,21 @@ export function registerInterviewIpc(
       z.number().int().min(0).max(19),
       z.string().trim().min(1).max(12000),
     ]),
-    (id, index, text) => service.submit(id, index, text),
+    (id, index, text) => {
+      service.submit(id, index, text);
+      drafts.discard(id);
+    },
   );
   handle("nextInterview", z.tuple([interviewId]), (id) => service.next(id));
   handle("retryInterview", z.tuple([interviewId]), (id) => service.retry(id));
-  handle("finishInterview", z.tuple([interviewId]), (id) => service.finish(id));
-  handle("deleteInterview", z.tuple([interviewId]), (id) => service.delete(id));
+  handle("finishInterview", z.tuple([interviewId]), (id) => {
+    drafts.flush();
+    service.finish(id);
+  });
+  handle("deleteInterview", z.tuple([interviewId]), (id) => {
+    drafts.discard(id);
+    service.delete(id);
+  });
   handle("interviewQuestions", z.tuple([]), () => repo.listQuestions());
   handle("saveInterviewQuestion", z.tuple([questionInputSchema]), (input) =>
     repo.saveQuestion(input),
@@ -98,5 +148,11 @@ export function registerInterviewIpc(
       importing = false;
     }
   });
-  return () => service.close();
+  return {
+    flush: () => drafts.flush(),
+    close: () => {
+      drafts.flush();
+      service.close();
+    },
+  };
 }

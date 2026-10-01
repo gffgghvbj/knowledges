@@ -1,3 +1,4 @@
+import type { QaSummary } from "../../shared/lists";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join, relative, dirname } from "node:path";
@@ -312,6 +313,18 @@ export class LibraryRepository {
           this.putQa({ ...record, category: undefined });
       this.db.prepare("DELETE FROM qa_categories WHERE name=?").run(name);
     });
+  }
+  getQa(id: string): QaRecord | undefined {
+    return this.get<QaRecord>("qa_records", id);
+  }
+  qaSummaries(): QaSummary[] {
+    return this.db
+      .prepare(
+        `SELECT id, substr(json_extract(data,'$.question'),1,200) question,
+      json_extract(data,'$.status') status, json_extract(data,'$.createdAt') createdAt,
+      json_extract(data,'$.category') category FROM qa_records ORDER BY json_extract(data,'$.createdAt') DESC, id DESC`,
+      )
+      .all() as QaSummary[];
   }
   listQa(): QaRecord[] {
     return this.db

@@ -1,3 +1,5 @@
+import { revision } from "./library/revision";
+import type { LibraryState } from "../shared/contracts";
 import { registerInterviewIpc } from "./interview/ipc";
 import { RetrievalSettings } from "./knowledge/retrieval-settings";
 import { VectorIndex } from "./knowledge/vector-index";
@@ -137,6 +139,8 @@ export function registerIpc(
     (question, scope, provider, supplement) =>
       qa.ask(question, scope, provider, supplement),
   );
+  handle("qaSummaries", z.tuple([]), () => repo.qaSummaries());
+  handle("qaRecord", z.tuple([id]), (id) => repo.getQa(id) ?? null);
   handle("qaHistory", z.tuple([]), () => repo.listQa());
   handle("qaCategories", z.tuple([]), () => repo.listQaCategories());
   handle("createQaCategory", z.tuple([categoryNameSchema]), (name) =>
@@ -159,6 +163,41 @@ export function registerIpc(
   handle("deleteQa", z.tuple([qaIds]), (ids) => qa.delete(ids));
   handle("cancelQa", z.tuple([id]), (id) => qa.cancel(id));
   handle("getStatus", z.tuple([]), () => ({ ready: true }));
+  handle(
+    "stateUpdate",
+    z.tuple([z.string().max(4000).optional()]),
+    (previous) => {
+      const vector = vectorIndex.status();
+      const keys = [
+        revision(repo.db, ["sources"]),
+        revision(repo.db, ["articles"]),
+        revision(repo.db, ["tasks"]),
+        revision(repo.db, ["articles", "knowledge_chunks"]),
+        JSON.stringify(vector),
+      ];
+      let old: string[] = [];
+      try {
+        const parsed = JSON.parse(previous ?? "[]");
+        if (Array.isArray(parsed)) old = parsed;
+      } catch {}
+      const patch: Partial<LibraryState> = {};
+      if (!previous) patch.root = repo.root;
+      if (keys[0] !== old[0]) patch.sources = repo.listSources();
+      if (keys[1] !== old[1]) patch.articles = repo.listArticles();
+      if (keys[2] !== old[2]) patch.tasks = repo.listTasks();
+      if (keys[3] !== old[3])
+        patch.knowledgeIndex = {
+          articles: Number(
+            repo.db.prepare("SELECT count(*) n FROM articles").get()!.n,
+          ),
+          chunks: Number(
+            repo.db.prepare("SELECT count(*) n FROM knowledge_chunks").get()!.n,
+          ),
+        };
+      if (keys[4] !== old[4]) patch.vectorIndex = vector;
+      return { revision: JSON.stringify(keys), patch };
+    },
+  );
   handle("state", z.tuple([]), () => ({
     sources: repo.listSources(),
     articles: repo.listArticles(),
@@ -245,6 +284,7 @@ export function registerIpc(
       filters: [{ name: "拾知备份", extensions: ["ikb"] }],
     });
     if (result.canceled || !result.filePath) return { cancelled: true };
+    closeInterviews.flush();
     await exportLibrary(repo, result.filePath);
     return { cancelled: false, path: result.filePath };
   });
@@ -262,10 +302,11 @@ export function registerIpc(
   });
   handle("importBackup", z.tuple([text]), (path) => {
     if (!approvedImports.has(path)) throw Error("请先选择并检查备份文件");
+    closeInterviews.flush();
     return importBackup(repo, path);
   });
   return () => {
+    closeInterviews.close();
     vectorIndex.close();
-    closeInterviews();
   };
 }

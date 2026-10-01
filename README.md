@@ -1,6 +1,6 @@
 # 拾知 · 本地面试资料库
 
-个人使用的跨平台桌面应用。当前 v0.5 支持网站资料采集、本地 Markdown 阅读、版本与备份、DeepSeek / Ollama 问答，以及 Qwen 向量检索和精排。现已支持简历/JD、题库与文字模拟面试。
+个人使用的跨平台桌面应用。当前 v0.5.1 支持网站资料采集、本地 Markdown 阅读、版本与备份、DeepSeek / Ollama 问答，以及 Qwen 向量检索和精排。现已支持简历/JD、题库与文字模拟面试。
 
 ## 开发运行
 
@@ -115,3 +115,5 @@ npx playwright test --config=playwright.live.config.ts
 [第二阶段计划](docs/superpowers/plans/2026-09-30-knowledge-qa.md) · [第二阶段验收](docs/verification/phase2.md)
 
 [第三阶段验收](docs/verification/phase3.md)
+
+[v0.5.1 列表与输入优化验收](docs/verification/performance-v0.5.1.md)

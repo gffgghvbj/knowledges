@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import type { QaRecord } from "../shared/knowledge";
+import { memo, useEffect, useState } from "react";
+import type { QaSummary } from "../shared/lists";
+import { Pagination } from "./components/Pagination";
 import type { Run } from "./App";
 import { api } from "./api";
 const statusText = {
@@ -13,14 +14,14 @@ type Dialog =
   | { kind: "rename"; category: string }
   | { kind: "category"; category: string }
   | { kind: "records"; ids: string[] };
-export function QaHistory({
+export const QaHistory = memo(function QaHistory({
   history,
   selected,
   onSelect,
   onChanged,
   run,
 }: {
-  history: QaRecord[];
+  history: QaSummary[];
   selected: string;
   onSelect: (id: string) => void;
   onChanged: () => Promise<void>;
@@ -28,6 +29,7 @@ export function QaHistory({
 }) {
   const [categories, setCategories] = useState<string[]>([]),
     [filter, setFilter] = useState("*"),
+    [page, setPage] = useState(0),
     [checked, setChecked] = useState<string[]>([]),
     [target, setTarget] = useState(""),
     [dialog, setDialog] = useState<Dialog | null>(null),
@@ -46,10 +48,15 @@ export function QaHistory({
     return () => {
       active = false;
     };
-  }, [history]);
-  const rows = history.filter(
+  }, []);
+  const filtered = history.filter(
     (r) => filter === "*" || (r.category ? "cat:" + r.category : "") === filter,
   );
+  const safePage = Math.min(
+    page,
+    Math.max(0, Math.ceil(filtered.length / 50) - 1),
+  );
+  const rows = filtered.slice(safePage * 50, (safePage + 1) * 50);
   const ids = checked.filter((id) => rows.some((r) => r.id === id));
   const allChecked = rows.length > 0 && ids.length === rows.length;
   const perform = (action: () => Promise<unknown>) =>
@@ -105,6 +112,7 @@ export function QaHistory({
             value={filter}
             onChange={(e) => {
               setFilter(e.target.value);
+              setPage(0);
               setChecked([]);
             }}
           >
@@ -162,7 +170,7 @@ export function QaHistory({
                 setChecked(e.target.checked ? rows.map((r) => r.id) : [])
               }
             />
-            全选当前分类 · 已选 {ids.length} 条
+            全选本页 · 已选 {ids.length} 条
           </label>
         )}
         {ids.length > 0 && (
@@ -239,6 +247,14 @@ export function QaHistory({
           </button>
         </div>
       ))}
+      <Pagination
+        page={safePage}
+        total={filtered.length}
+        onChange={(p) => {
+          setPage(p);
+          setChecked([]);
+        }}
+      />
       {dialog && (
         <div className="modal-backdrop">
           <section
@@ -324,4 +340,4 @@ export function QaHistory({
       )}
     </aside>
   );
-}
+});

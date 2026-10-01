@@ -1,4 +1,4 @@
-import { test, expect } from "vitest";
+import { test, expect, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -398,6 +398,32 @@ test("异步检索前已保存问题，取消保持取消状态且不生成回�
   } finally {
     release();
     await service.waitForIdle();
+    f.dispose();
+  }
+});
+
+test("idle index statistics reuse cached scans and invalidate on new content", async () => {
+  const f = setup(),
+    index = new VectorIndex(f.repo, f.settings, embedder);
+  try {
+    f.save("cache", "Redis persistence");
+    index.start();
+    await index.waitForIdle();
+    const lists = vi.spyOn(f.repo, "listArticles");
+    const first = index.status();
+    const count = lists.mock.calls.length;
+    expect(first.ready).toBe(1);
+    for (let i = 0; i < 20; i++) {
+      expect(index.status()).toEqual(first);
+      await index.tick();
+    }
+    expect(lists.mock.calls.length).toBe(count);
+    f.save("new", "Another article");
+    expect(index.status().total).toBe(2);
+    await index.tick();
+    expect(index.status().ready).toBe(2);
+  } finally {
+    index.close();
     f.dispose();
   }
 });

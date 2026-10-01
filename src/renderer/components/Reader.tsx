@@ -1,10 +1,10 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
 import type { Article, ArticleVersion } from "../../shared/contracts";
 import { api } from "../api";
 import type { Run } from "../App";
-export function Reader({
+export const Reader = memo(function Reader({
   value,
   run,
 }: {
@@ -63,4 +63,4 @@ export function Reader({
       />
     </>
   );
-}
+});

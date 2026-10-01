@@ -1,3 +1,4 @@
+import type { MaterialSummary } from "../shared/lists";
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import type { Run } from "./App";
@@ -9,7 +10,7 @@ export function InterviewSetup({
   run: Run;
   onCreated: (id: string) => Promise<void>;
 }) {
-  const [materials, setMaterials] = useState<InterviewMaterial[]>([]),
+  const [materials, setMaterials] = useState<MaterialSummary[]>([]),
     [busy, setBusy] = useState(false),
     [points, setPoints] = useState(""),
     [config, setConfig] = useState<InterviewConfig>({
@@ -23,7 +24,7 @@ export function InterviewSetup({
       knowledgePoints: [],
     });
   useEffect(() => {
-    void run(async () => setMaterials(await api.interviewMaterials()));
+    void run(async () => setMaterials(await api.interviewMaterialSummaries()));
   }, []);
   return (
     <form

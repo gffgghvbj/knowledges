@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import type { QaSummary } from "../shared/lists";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LibraryState, LibraryApi } from "../shared/contracts";
 import type { QaRecord, Evidence } from "../shared/knowledge";
 import type { Run } from "./App";
@@ -14,8 +15,10 @@ export function KnowledgePage({
   run: Run;
   onSettings: () => void;
 }) {
-  const [history, setHistory] = useState<QaRecord[]>([]),
+  const [history, setHistory] = useState<QaSummary[]>([]),
     [selected, setSelected] = useState(""),
+    [current, setCurrent] = useState<QaRecord | null>(null),
+    [loading, setLoading] = useState(false),
     [question, setQuestion] = useState(""),
     [source, setSource] = useState(""),
     [section, setSection] = useState(""),
@@ -27,27 +30,72 @@ export function KnowledgePage({
     [original, setOriginal] = useState<Awaited<
       ReturnType<LibraryApi["read"]>
     > | null>(null);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const refreshHistory = useCallback(
+    async () => setHistory(await api.qaSummaries()),
+    [],
+  );
   useEffect(() => {
-    let mounted = true;
-    const refresh = () =>
-      api.qaHistory().then((rows) => {
-        if (mounted) setHistory(rows);
-      });
-    void run(refresh);
-    const timer = setInterval(() => void refresh().catch(() => {}), 1200);
-    return () => {
-      mounted = false;
-      clearInterval(timer);
-    };
+    void run(refreshHistory);
   }, []);
-  const current = history.find((r) => r.id === selected);
-  const sections = [
-    ...new Set(
-      state.articles
-        .filter((a) => !source || a.sourceId === source)
-        .flatMap((a) => a.sectionPath),
-    ),
-  ];
+  useEffect(() => {
+    let active = true;
+    if (!selected) {
+      setCurrent(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    void run(async () => {
+      try {
+        const record = await api.qaRecord(selected);
+        if (active) setCurrent(record);
+      } finally {
+        if (active) setLoading(false);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [selected]);
+  const working = history.some((r) => r.status === "pending");
+  useEffect(() => {
+    if (!working) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const rows = await api.qaSummaries();
+        const id = selectedRef.current;
+        const record =
+          id && current?.status === "pending"
+            ? await api.qaRecord(id)
+            : undefined;
+        if (!active) return;
+        setHistory(rows);
+        if (record !== undefined && selectedRef.current === id)
+          setCurrent(record);
+      } finally {
+        if (active) timer = setTimeout(() => void poll().catch(() => {}), 1200);
+      }
+    };
+    timer = setTimeout(() => void poll().catch(() => {}), 1200);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [working, selected, current?.status]);
+  const sections = useMemo(
+    () => [
+      ...new Set(
+        state.articles
+          .filter((a) => !source || a.sourceId === source)
+          .flatMap((a) => a.sectionPath),
+      ),
+    ],
+    [state.articles, source],
+  );
   const ask = (old?: QaRecord) =>
     run(async () => {
       setSending(true);
@@ -65,7 +113,7 @@ export function KnowledgePage({
           old?.allowSupplement ?? supplement,
         );
         setSelected(id);
-        setHistory(await api.qaHistory());
+        setHistory(await api.qaSummaries());
         if (!old) setQuestion("");
       } finally {
         setSending(false);
@@ -101,12 +149,12 @@ export function KnowledgePage({
           selected={selected}
           onSelect={setSelected}
           run={run}
-          onChanged={async () => {
-            setHistory(await api.qaHistory());
-          }}
+          onChanged={refreshHistory}
         />
         <section className="qa-main">
-          {current ? (
+          {loading ? (
+            <p role="status">正在读取回答…</p>
+          ) : current ? (
             <div className="qa-answer">
               <div className="qa-question">
                 <small>
@@ -154,7 +202,15 @@ export function KnowledgePage({
                     已找到 {current.evidence.length}{" "}
                     个相关段落。可以切换页面，完成后记录会自动保存。
                   </p>
-                  <button onClick={() => run(() => api.cancelQa(current.id))}>
+                  <button
+                    onClick={() =>
+                      run(async () => {
+                        await api.cancelQa(current.id);
+                        setCurrent(await api.qaRecord(current.id));
+                        await refreshHistory();
+                      })
+                    }
+                  >
                     取消生成
                   </button>
                 </div>

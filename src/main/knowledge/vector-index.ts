@@ -1,3 +1,4 @@
+import { revision } from "../library/revision";
 import type { LibraryRepository } from "../library/repository";
 import { MAX_CONTEXT_CHARS, type Evidence } from "../../shared/knowledge";
 import type { VectorStatus } from "../../shared/retrieval";
@@ -18,6 +19,22 @@ export function currentChunks(repo: LibraryRepository): Evidence[] {
 }
 export class VectorIndex {
   private work?: Promise<void>;
+  private counts?: {
+    key: string;
+    ready: number;
+    total: number;
+    excluded: number;
+  };
+  private settledKey?: string;
+  private indexKey() {
+    return (
+      revision(this.repo.db, [
+        "articles",
+        "knowledge_chunks",
+        "vector_embeddings",
+      ]) + JSON.stringify(this.settings.get())
+    );
+  }
   private controller?: AbortController;
   private timer?: ReturnType<typeof setInterval>;
   private epoch = 0;
@@ -60,13 +77,21 @@ export class VectorIndex {
   }
   status(): VectorStatus {
     const cfg = this.settings.get(),
-      all = currentChunks(this.repo),
-      chunks = all.filter((c) => c.quote.length <= MAX_CONTEXT_CHARS),
-      cached = this.readyIds(),
+      key = this.indexKey(),
       control = this.control();
-    const ready = chunks.filter(
-      (c) => cached.get(c.id) === hash(embeddingText(c)),
-    ).length;
+    if (this.counts?.key !== key) {
+      const all = currentChunks(this.repo),
+        chunks = all.filter((c) => c.quote.length <= MAX_CONTEXT_CHARS),
+        cached = this.readyIds();
+      this.counts = {
+        key,
+        ready: chunks.filter((c) => cached.get(c.id) === hash(embeddingText(c)))
+          .length,
+        total: chunks.length,
+        excluded: all.length - chunks.length,
+      };
+    }
+    const { ready, total, excluded } = this.counts;
     return {
       state: !cfg.enabled
         ? "disabled"
@@ -76,12 +101,12 @@ export class VectorIndex {
             ? "paused"
             : this.work
               ? "running"
-              : ready === chunks.length
+              : ready === total
                 ? "ready"
                 : "running",
       ready,
-      total: chunks.length,
-      excluded: all.length - chunks.length,
+      total,
+      excluded,
       error: control.error || undefined,
       model: cfg.embedding.model,
     };
@@ -89,6 +114,7 @@ export class VectorIndex {
   start() {
     if (this.closed) throw Error("索引服务已关闭");
     if (!this.settings.get().enabled) throw Error("请先启用混合检索并保存设置");
+    this.settledKey = undefined;
     this.setControl(false);
     void this.tick();
   }
@@ -109,6 +135,7 @@ export class VectorIndex {
     if (this.work) return this.work;
     if (this.closed || this.control().paused || !this.settings.get().enabled)
       return;
+    if (this.settledKey === this.indexKey()) return;
     const controller = new AbortController(),
       epoch = this.epoch;
     this.controller = controller;
@@ -139,7 +166,10 @@ export class VectorIndex {
           pending = this.eligible().filter(
             (c) => ready.get(c.id) !== hash(embeddingText(c)),
           );
-        if (!pending.length) return;
+        if (!pending.length) {
+          this.settledKey = this.indexKey();
+          return;
+        }
         const batch: Evidence[] = [];
         let chars = 0;
         for (const c of pending) {

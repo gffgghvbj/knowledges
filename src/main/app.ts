@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol } from "electron";
+import { app, BrowserWindow, protocol, dialog } from "electron";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { registerIpc } from "./ipc";
@@ -62,9 +62,17 @@ app.whenReady().then(() => {
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event) => event.preventDefault());
   void win.loadFile(join(__dirname, "../renderer/index.html"));
-  app.on("before-quit", () => {
-    queue.stop();
-    closeServices();
+  app.on("before-quit", (event) => {
+    try {
+      closeServices();
+      queue.stop();
+    } catch {
+      event.preventDefault();
+      dialog.showErrorBox(
+        "草稿尚未保存",
+        "无法写入资料库，请检查磁盘后再退出。",
+      );
+    }
   });
 });
 app.on("window-all-closed", () => app.quit());

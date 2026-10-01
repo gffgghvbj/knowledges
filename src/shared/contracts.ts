@@ -1,3 +1,9 @@
+import type {
+  QaSummary,
+  MaterialSummary,
+  QuestionSummary,
+  SessionSummary,
+} from "./lists";
 import type { InterviewConfig, InterviewSessionView } from "./interview";
 import type { InterviewQuestion, QuestionInput } from "./interview";
 import type { InterviewMaterial, MaterialInput } from "./interview";
@@ -126,6 +132,16 @@ export interface LibraryState {
   root: string;
 }
 export interface LibraryApi {
+  qaSummaries(): Promise<QaSummary[]>;
+  qaRecord(id: string): Promise<QaRecord | null>;
+  interviewSessionSummaries(): Promise<SessionSummary[]>;
+  interviewSession(id: string): Promise<InterviewSessionView | null>;
+  interviewMaterialSummaries(): Promise<MaterialSummary[]>;
+  interviewMaterial(id: string): Promise<InterviewMaterial | null>;
+  interviewQuestionSummaries(): Promise<QuestionSummary[]>;
+  interviewQuestion(id: string): Promise<InterviewQuestion | null>;
+  flushInterviewDrafts(): Promise<void>;
+
   interviewSessions(): Promise<InterviewSessionView[]>;
   createInterview(config: InterviewConfig): Promise<string>;
   saveInterviewDraft(id: string, index: number, text: string): Promise<void>;
@@ -170,6 +186,9 @@ export interface LibraryApi {
   cancelQa(id: string): Promise<void>;
   getStatus(): Promise<{ ready: boolean }>;
   state(): Promise<LibraryState>;
+  stateUpdate(
+    revision?: string,
+  ): Promise<{ revision: string; patch: Partial<LibraryState> }>;
   addSource(url: string): Promise<Source>;
   login(id: string): Promise<void>;
   scan(id: string): Promise<string>;
