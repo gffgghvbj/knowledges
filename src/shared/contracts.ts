@@ -1,3 +1,8 @@
+import type {
+  ExtractionSelection,
+  ExtractionRule,
+  ExtractionPreview,
+} from "./extraction";
 import type { ReviewItem, ReviewSummary } from "./review";
 import type {
   QaSummary,
@@ -20,6 +25,7 @@ import type {
   QaScope,
 } from "./knowledge";
 export interface Source {
+  extraction?: ExtractionSelection;
   id: string;
   entryUrl: string;
   allowedOrigins: string[];
@@ -204,7 +210,18 @@ export interface LibraryApi {
   stateUpdate(
     revision?: string,
   ): Promise<{ revision: string; patch: Partial<LibraryState> }>;
-  addSource(url: string): Promise<Source>;
+  addSource(url: string, extraction?: ExtractionSelection): Promise<Source>;
+  saveExtraction(
+    sourceId: string,
+    selection: ExtractionSelection,
+  ): Promise<void>;
+  previewExtraction(
+    sourceId: string,
+    url: string,
+    selection: ExtractionSelection,
+  ): Promise<ExtractionPreview>;
+  parseExtractionRule(json: string): Promise<ExtractionRule>;
+  exportExtractionRule(rule: ExtractionRule): Promise<string | null>;
   login(id: string): Promise<void>;
   scan(id: string): Promise<string>;
   capture(taskId: string, sections: string[]): Promise<string>;

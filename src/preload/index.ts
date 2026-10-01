@@ -3,6 +3,10 @@ const ready = ipcRenderer.invoke("library:startupReady") as Promise<{
   error?: string;
 }>;
 const names = [
+  "saveExtraction",
+  "previewExtraction",
+  "parseExtractionRule",
+  "exportExtractionRule",
   "reviewSummaries",
   "reviewItem",
   "addReview",

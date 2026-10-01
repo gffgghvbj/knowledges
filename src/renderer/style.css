@@ -1345,3 +1345,39 @@ details {
     grid-template-columns: 1fr;
   }
 }
+
+.extraction-modal {
+  width: min(1050px, 94vw);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.extraction-modal label {
+  display: block;
+  margin: 14px 0;
+}
+.extraction-modal label > input:not([type="file"]),
+.extraction-modal label > select,
+.extraction-modal textarea {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}
+.extraction-modal .rule-json {
+  min-height: 230px;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+}
+.extraction-preview {
+  margin-top: 20px;
+  border-top: 1px solid var(--line, #dde4e1);
+  padding-top: 16px;
+}
+.rule-markdown {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f4f7f5;
+  padding: 20px;
+}
+.rule-import {
+  max-width: 70%;
+}

@@ -1,3 +1,9 @@
+import { ExtractionDialog, ruleOptions } from "./ExtractionDialog";
+import {
+  resolveExtractionRule,
+  type ExtractionSelection,
+} from "../shared/extraction";
+import type { Source } from "../shared/contracts";
 import { useState } from "react";
 import type { LibraryState } from "../shared/contracts";
 import type { Run } from "./App";
@@ -14,7 +20,11 @@ export function SourcePage({
   onTask: () => void;
 }) {
   const [adding, setAdding] = useState(false),
-    [url, setUrl] = useState("");
+    [url, setUrl] = useState(""),
+    [selection, setSelection] = useState<ExtractionSelection>({
+      preset: "auto",
+    }),
+    [editing, setEditing] = useState<Source | null>(null);
   return (
     <>
       <div className="page-heading">
@@ -96,9 +106,7 @@ export function SourcePage({
                     <h3>{s.label}</h3>
                     <small>{new URL(s.entryUrl).hostname}</small>
                   </div>
-                  <span className="tag">
-                    {s.adapterId === "generic" ? "通用识别" : "专用适配"}
-                  </span>
+                  <span className="tag">{resolveExtractionRule(s).name}</span>
                 </div>
                 <p className="source-link">{s.entryUrl}</p>
                 <div className="source-meta">
@@ -115,6 +123,9 @@ export function SourcePage({
                   </span>
                 </div>
                 <div className="card-actions">
+                  <button disabled={busy} onClick={() => setEditing(s)}>
+                    提取规则
+                  </button>
                   <button
                     className="primary"
                     disabled={busy}
@@ -156,6 +167,13 @@ export function SourcePage({
           正文与图片保存在本机。网站更新会保留历史版本；源站移除文章也不会删除你的本地副本。
         </p>
       </div>
+      {editing && (
+        <ExtractionDialog
+          source={editing}
+          run={run}
+          onClose={() => setEditing(null)}
+        />
+      )}
       {adding && (
         <div className="modal-backdrop">
           <form
@@ -163,7 +181,7 @@ export function SourcePage({
             onSubmit={(e) => {
               e.preventDefault();
               void run(async () => {
-                await api.addSource(url);
+                await api.addSource(url, selection);
                 setAdding(false);
                 setUrl("");
               });
@@ -182,6 +200,28 @@ export function SourcePage({
                 onChange={(e) => setUrl(e.target.value)}
               />
             </label>
+            <label>
+              提取规则
+              <select
+                aria-label="新网站提取规则"
+                value={selection.preset}
+                onChange={(e) =>
+                  setSelection({
+                    preset: e.target.value as
+                      "auto" | "generic" | "xiaolin" | "javaguide" | "carl",
+                  })
+                }
+              >
+                {ruleOptions
+                  .filter(([id]) => id !== "custom")
+                  .map(([id, name]) => (
+                    <option key={id} value={id}>
+                      {name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <small>保存网站后，可在“提取规则”中预览或导入自定义规则。</small>
             <small>扫描范围限定在同一网站；登录后内容需要先完成登录。</small>
             <div className="modal-actions">
               <button type="button" onClick={() => setAdding(false)}>

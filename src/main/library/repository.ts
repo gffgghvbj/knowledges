@@ -1,3 +1,5 @@
+import type { ExtractionSelection } from "../../shared/extraction";
+import { validateSelection } from "../capture/adapters/rules";
 import type { QaSummary } from "../../shared/lists";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, readFileSync, statSync } from "node:fs";
@@ -67,7 +69,8 @@ export class LibraryRepository {
       .prepare("INSERT OR REPLACE INTO sources VALUES (?,?)")
       .run(source.id, JSON.stringify(source));
   }
-  addSource(input: string): Source {
+  addSource(input: string, extraction?: ExtractionSelection): Source {
+    const selection = validateSelection(extraction ?? { preset: "auto" });
     const entryUrl = normalizeUrl(input),
       url = new URL(entryUrl),
       id = hash(url.origin);
@@ -83,6 +86,7 @@ export class LibraryRepository {
       id,
       entryUrl,
       allowedOrigins: [url.origin],
+      extraction: selection,
       adapterId,
       label:
         adapterId === "xiaolin"

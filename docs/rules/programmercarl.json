@@ -1,0 +1,17 @@
+{
+  "formatVersion": 1,
+  "name": "代码随想录",
+  "bodySelector": ".theme-default-content",
+  "titleSelector": "h1",
+  "linkSelector": "a[href]",
+  "removeSelectors": [
+    ".sr-only",
+    ".icon.outbound",
+    ".page-edit",
+    ".page-nav",
+    ".last-updated"
+  ],
+  "pathPrefixes": [],
+  "normalizeCode": true,
+  "expandDetails": true
+}

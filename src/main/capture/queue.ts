@@ -31,6 +31,11 @@ export class CaptureQueue {
         repo.putTask(task);
       }
   }
+  isActive(sourceId: string) {
+    return [...this.active.keys()].some(
+      (id) => this.repo.getTask(id)?.sourceId === sourceId,
+    );
+  }
   private source(id: string) {
     const s = this.repo.getSource(id);
     if (!s) throw Error("网站不存在");

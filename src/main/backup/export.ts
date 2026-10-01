@@ -25,7 +25,7 @@ export async function exportLibrary(
     ];
   const interviews = new InterviewRepository(repo.db);
   const manifest: Manifest = {
-    formatVersion: 5,
+    formatVersion: 6,
     interviewReviews: new ReviewRepository(repo.db).list(),
     interviewMaterials: interviews.listMaterials(),
     interviewQuestions: interviews.listQuestions(),

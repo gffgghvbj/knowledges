@@ -1,3 +1,5 @@
+import { resolveExtractionRule } from "../../../shared/extraction";
+import { validateRule } from "./rules";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
@@ -16,13 +18,9 @@ export interface SiteAdapter {
   discover(snapshot: PageSnapshot): Candidate[];
   extract(snapshot: PageSnapshot, candidate: Candidate): ExtractedArticle;
 }
-const selectors: Record<string, string> = {
-  xiaolin: ".theme-default-content",
-  javaguide: "[vp-content]",
-  generic: "article, .theme-default-content, [vp-content], .vp-doc, main",
-};
 export function getAdapter(source: Source): SiteAdapter {
-  const selector = selectors[source.adapterId] ?? selectors.generic;
+  const rule = validateRule(resolveExtractionRule(source));
+  const selector = rule.bodySelector;
   return {
     canonicalize: normalizeUrl,
     classify(snapshot) {
@@ -64,8 +62,8 @@ export function getAdapter(source: Source): SiteAdapter {
     discover(snapshot) {
       const { document } = parseHTML(snapshot.html),
         found = new Map<string, Candidate>();
-      for (const a of document.querySelectorAll("a[href]")) {
-        const href = a.getAttribute("href")!;
+      for (const a of document.querySelectorAll(rule.linkSelector)) {
+        const href = a.getAttribute("href");
         if (!href || href.startsWith("#")) continue;
         try {
           const canonicalUrl = normalizeUrl(
@@ -74,6 +72,8 @@ export function getAdapter(source: Source): SiteAdapter {
             url = new URL(canonicalUrl);
           if (
             !source.allowedOrigins.includes(url.origin) ||
+            (rule.pathPrefixes.length > 0 &&
+              !rule.pathPrefixes.some((p) => url.pathname.startsWith(p))) ||
             /\.(png|jpe?g|gif|webp|svg|pdf|zip|css|js|mp[34]|ico)(\?|$)/i.test(
               url.pathname,
             ) ||
@@ -107,14 +107,45 @@ export function getAdapter(source: Source): SiteAdapter {
         body = document.querySelector(selector);
       if (!body) throw new Error("未识别到正文");
       const title =
-        body.querySelector("h1")?.textContent?.replace(/^#\s*/, "").trim() ||
-        document.querySelector("h1")?.textContent?.trim() ||
+        body
+          .querySelector(rule.titleSelector)
+          ?.textContent?.replace(/^#\s*/, "")
+          .trim() ||
+        document.querySelector(rule.titleSelector)?.textContent?.trim() ||
         document.querySelector("title")?.textContent?.split("|")[0].trim() ||
         candidate.title;
       for (const node of body.querySelectorAll(
         "script,style,nav,iframe,form,button,.header-anchor,.copy-code-button,.vp-page-nav,.vp-comment,.advertisement,.ads",
       ))
         node.remove();
+      for (const excluded of rule.removeSelectors)
+        for (const node of body.querySelectorAll(excluded)) node.remove();
+      if (rule.normalizeCode) {
+        for (const node of body.querySelectorAll(
+          ".line-numbers-wrapper, .line-numbers-rows, .copy-code, .code-copy",
+        ))
+          node.remove();
+        for (const pre of body.querySelectorAll("pre")) {
+          const original = pre.querySelector("code");
+          const language =
+            [original, pre, pre.parentElement]
+              .map((n) => n?.getAttribute("class") ?? "")
+              .join(" ")
+              .match(/(?:language-|lang-)([a-zA-Z0-9_+-]+)/)?.[1] ?? "";
+          const code = document.createElement("code");
+          code.textContent = original?.textContent ?? pre.textContent ?? "";
+          if (language) code.setAttribute("class", "language-" + language);
+          pre.replaceChildren(code);
+        }
+      }
+      if (rule.expandDetails)
+        for (const summary of body.querySelectorAll("details > summary")) {
+          const heading = document.createElement("p");
+          const strong = document.createElement("strong");
+          strong.textContent = summary.textContent;
+          heading.appendChild(strong);
+          summary.replaceWith(heading);
+        }
       const assets: ExtractedArticle["assets"] = [];
       for (const img of body.querySelectorAll("img")) {
         const raw =

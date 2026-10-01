@@ -1,3 +1,5 @@
+import { registerRuleIpc } from "./capture/rule-ipc";
+import { extractionSelectionSchema } from "../shared/extraction-schema";
 import { revision } from "./library/revision";
 import type { LibraryState } from "../shared/contracts";
 import { registerInterviewIpc } from "./interview/ipc";
@@ -51,6 +53,7 @@ export function registerIpc(
       const values = schema.parse(args) as any[];
       return fn(...values);
     });
+  registerRuleIpc(handle, win, repo, queue);
   const settings = new ModelSettings(repo.root, safeStorage),
     retrievalSettings = new RetrievalSettings(repo.root, safeStorage),
     vectorIndex = new VectorIndex(repo, retrievalSettings),
@@ -212,7 +215,11 @@ export function registerIpc(
       ),
     },
   }));
-  handle("addSource", z.tuple([text]), (url) => repo.addSource(url));
+  handle(
+    "addSource",
+    z.tuple([text, extractionSelectionSchema.optional()]),
+    (url, selection) => repo.addSource(url, selection),
+  );
   handle("login", z.tuple([id]), (sourceId) => {
     const source = repo.getSource(sourceId);
     if (!source) throw Error("网站不存在");

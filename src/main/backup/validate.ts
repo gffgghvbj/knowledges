@@ -1,3 +1,4 @@
+import { validateSelection } from "../capture/adapters/rules";
 import { validateSession, validateGrade } from "../interview/scoring";
 import type { Evidence } from "../../shared/knowledge";
 import { open, type ZipFile, type Entry } from "yauzl";
@@ -85,6 +86,8 @@ export async function validateBackup(
     const manifest = manifestSchema.parse(
       JSON.parse(manifestBytes.toString("utf8")),
     );
+    for (const source of manifest.sources)
+      if (source.extraction) validateSelection(source.extraction);
     const expected = new Set(["manifest.json"]);
     for (const file of manifest.files) {
       if (expected.has(file.path)) throw Error("清单路径重复");

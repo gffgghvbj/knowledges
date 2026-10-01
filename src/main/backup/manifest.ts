@@ -1,3 +1,4 @@
+import { extractionSelectionSchema } from "../../shared/extraction-schema";
 import { reviewSchema } from "../../shared/review";
 import {
   materialSchema,
@@ -28,6 +29,7 @@ export const manifestSchema = z.object({
     z.literal(3),
     z.literal(4),
     z.literal(5),
+    z.literal(6),
   ]),
   interviewReviews: z.array(reviewSchema).max(100000).default([]),
   interviewMaterials: z.array(materialSchema).max(10000).default([]),
@@ -40,6 +42,7 @@ export const manifestSchema = z.object({
     z.object({
       id,
       entryUrl: web,
+      extraction: extractionSelectionSchema.optional(),
       allowedOrigins: z.array(web),
       adapterId: z
         .string()
