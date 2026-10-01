@@ -13,7 +13,7 @@ export async function exportLibrary(
   repo: LibraryRepository,
   destination: string,
 ) {
-  const articles = repo.listArticles(),
+  const articles = repo.listArticles(true),
     versions = articles.flatMap((a) => repo.listVersions(a.id)),
     paths = [
       ...new Set(
@@ -25,7 +25,7 @@ export async function exportLibrary(
     ];
   const interviews = new InterviewRepository(repo.db);
   const manifest: Manifest = {
-    formatVersion: 6,
+    formatVersion: 7,
     interviewReviews: new ReviewRepository(repo.db).list(),
     interviewMaterials: interviews.listMaterials(),
     interviewQuestions: interviews.listQuestions(),
@@ -33,7 +33,7 @@ export async function exportLibrary(
     qaCategories: repo.listQaCategories(),
     qaRecords: repo.listQa(),
     createdAt: new Date().toISOString(),
-    sources: repo.listSources(),
+    sources: repo.listSources(true),
     articles,
     versions,
     files: paths.map((path) => {

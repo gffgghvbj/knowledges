@@ -22,6 +22,7 @@ export function searchArticles(
       params.push(literal, literal);
     }
   }
+  where += " AND json_extract(a.data,'$.deletedAt') IS NULL";
   if (filter.sourceId) {
     where += " AND json_extract(a.data,'$.sourceId')=?";
     params.push(filter.sourceId);

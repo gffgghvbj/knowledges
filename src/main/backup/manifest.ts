@@ -30,6 +30,7 @@ export const manifestSchema = z.object({
     z.literal(4),
     z.literal(5),
     z.literal(6),
+    z.literal(7),
   ]),
   interviewReviews: z.array(reviewSchema).max(100000).default([]),
   interviewMaterials: z.array(materialSchema).max(10000).default([]),
@@ -41,6 +42,7 @@ export const manifestSchema = z.object({
   sources: z.array(
     z.object({
       id,
+      deletedAt: time.optional(),
       entryUrl: web,
       extraction: extractionSelectionSchema.optional(),
       allowedOrigins: z.array(web),
@@ -54,6 +56,7 @@ export const manifestSchema = z.object({
   articles: z.array(
     z.object({
       id,
+      deletedAt: time.optional(),
       sourceId: id,
       canonicalUrl: web,
       title: z.string(),

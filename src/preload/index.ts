@@ -3,6 +3,11 @@ const ready = ipcRenderer.invoke("library:startupReady") as Promise<{
   error?: string;
 }>;
 const names = [
+  "deleteSource",
+  "deleteTasks",
+  "trashArticles",
+  "restoreArticles",
+  "trashedArticles",
   "saveExtraction",
   "previewExtraction",
   "parseExtractionRule",

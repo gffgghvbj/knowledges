@@ -25,6 +25,7 @@ import type {
   QaScope,
 } from "./knowledge";
 export interface Source {
+  deletedAt?: string;
   extraction?: ExtractionSelection;
   id: string;
   entryUrl: string;
@@ -72,6 +73,7 @@ export interface ExtractedArticle {
   assets: AssetInput[];
 }
 export interface Article extends Candidate {
+  deletedAt?: string;
   id: string;
   currentVersionId: string;
   sourceStatus: "available" | "unavailable" | "removed";
@@ -146,6 +148,11 @@ export interface StartupStatus {
   error?: string;
 }
 export interface LibraryApi {
+  deleteSource(id: string): Promise<void>;
+  deleteTasks(ids: string[]): Promise<void>;
+  trashArticles(ids: string[]): Promise<void>;
+  restoreArticles(ids: string[]): Promise<void>;
+  trashedArticles(): Promise<Article[]>;
   reviewSummaries(): Promise<ReviewSummary[]>;
   reviewItem(id: string): Promise<ReviewItem | null>;
   addReview(sessionId: string, index: number): Promise<string>;

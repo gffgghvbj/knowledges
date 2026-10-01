@@ -31,6 +31,51 @@ const candidates = (source: Source) => [
     sectionPath: ["docs"],
   },
 ];
+for (const during of ["page", "image"] as const)
+  for (const remove of ["task", "source"] as const)
+    test(`deleting ${remove} during ${during} fetch prevents late writes and further requests`, async () => {
+      const s = repo.addSource("https://example.com/");
+      let release!: () => void, entered!: () => void;
+      const pending = new Promise<void>((r) => {
+        release = r;
+      });
+      const started = new Promise<void>((r) => {
+        entered = r;
+      });
+      let images = 0;
+      const q = new CaptureQueue(
+        repo,
+        {
+          load: async (_s, url) => {
+            if (during === "page") {
+              entered();
+              await pending;
+            }
+            return page(
+              url,
+              '<h1>Redis</h1><img src="/a.png"><img src="/b.png">',
+            );
+          },
+          asset: async () => {
+            images++;
+            entered();
+            await pending;
+            return { bytes: Buffer.from("image"), mimeType: "image/png" };
+          },
+        },
+        0,
+      );
+      const id = q.startCapture(s.id, candidates(s));
+      await started;
+      if (remove === "task") repo.deleteTasks([id]);
+      else repo.deleteSource(s.id);
+      release();
+      await q.waitForIdle();
+      expect(repo.listTasks()).toHaveLength(0);
+      expect(repo.listArticles()).toHaveLength(0);
+      expect(images).toBe(during === "image" ? 1 : 0);
+      if (remove === "source") expect(() => q.scan(s.id)).toThrow("已移除");
+    });
 test("missing images remain partial and retry fills assets without duplicate articles", async () => {
   const source = repo.addSource("https://example.com/");
   let imageAvailable = false;

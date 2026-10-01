@@ -8,6 +8,7 @@ import { useState } from "react";
 import type { LibraryState } from "../shared/contracts";
 import type { Run } from "./App";
 import { api } from "./api";
+import { ConfirmDelete } from "./components/ConfirmDelete";
 export function SourcePage({
   state,
   run,
@@ -24,7 +25,9 @@ export function SourcePage({
     [selection, setSelection] = useState<ExtractionSelection>({
       preset: "auto",
     }),
-    [editing, setEditing] = useState<Source | null>(null);
+    [editing, setEditing] = useState<Source | null>(null),
+    [deleting, setDeleting] = useState<Source | null>(null);
+  const sources = state.sources.filter((s) => !s.deletedAt);
   return (
     <>
       <div className="page-heading">
@@ -41,7 +44,7 @@ export function SourcePage({
         <div>
           <span>已添加来源</span>
           <strong>
-            {state.sources.length}
+            {sources.length}
             <small>个网站</small>
           </strong>
         </div>
@@ -65,11 +68,11 @@ export function SourcePage({
       </section>
       <div className="section-heading">
         <h3>
-          网站来源 <span>{state.sources.length}</span>
+          网站来源 <span>{sources.length}</span>
         </h3>
         <small>按需采集 · 手动更新</small>
       </div>
-      {state.sources.length === 0 ? (
+      {sources.length === 0 ? (
         <section className="empty-card">
           <div className="empty-icon">◈</div>
           <h3>从一个值得收藏的网站开始</h3>
@@ -96,7 +99,7 @@ export function SourcePage({
         </section>
       ) : (
         <div className="source-grid">
-          {state.sources.map((s) => {
+          {sources.map((s) => {
             const latest = state.tasks.find((t) => t.sourceId === s.id);
             return (
               <section className="source-card" key={s.id}>
@@ -123,6 +126,13 @@ export function SourcePage({
                   </span>
                 </div>
                 <div className="card-actions">
+                  <button
+                    className="danger-button"
+                    disabled={busy}
+                    onClick={() => setDeleting(s)}
+                  >
+                    删除来源
+                  </button>
                   <button disabled={busy} onClick={() => setEditing(s)}>
                     提取规则
                   </button>
@@ -167,6 +177,19 @@ export function SourcePage({
           正文与图片保存在本机。网站更新会保留历史版本；源站移除文章也不会删除你的本地副本。
         </p>
       </div>
+      {deleting && (
+        <ConfirmDelete
+          title="删除网站来源？"
+          description={`将移除「${deleting.label}」和该网站的采集任务，停止后续结果保存。已采集文章、问答和面试记录都会保留。重新添加同一网站可恢复来源配置。`}
+          onCancel={() => setDeleting(null)}
+          onConfirm={() =>
+            run(async () => {
+              await api.deleteSource(deleting.id);
+              setDeleting(null);
+            })
+          }
+        />
+      )}
       {editing && (
         <ExtractionDialog
           source={editing}

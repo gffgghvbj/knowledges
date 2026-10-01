@@ -165,6 +165,17 @@ export function registerIpc(
   );
   handle("deleteQa", z.tuple([qaIds]), (ids) => qa.delete(ids));
   handle("cancelQa", z.tuple([id]), (id) => qa.cancel(id));
+  handle("deleteSource", z.tuple([id]), (id) => repo.deleteSource(id));
+  handle("deleteTasks", z.tuple([z.array(id).min(1).max(10000)]), (ids) =>
+    repo.deleteTasks(ids),
+  );
+  handle("trashArticles", z.tuple([z.array(id).min(1).max(10000)]), (ids) =>
+    repo.trashArticles(ids),
+  );
+  handle("restoreArticles", z.tuple([z.array(id).min(1).max(10000)]), (ids) =>
+    repo.restoreArticles(ids),
+  );
+  handle("trashedArticles", z.tuple([]), () => repo.trashedArticles());
   handle("getStatus", z.tuple([]), () => ({ ready: true }));
   handle(
     "stateUpdate",
@@ -185,13 +196,17 @@ export function registerIpc(
       } catch {}
       const patch: Partial<LibraryState> = {};
       if (!previous) patch.root = repo.root;
-      if (keys[0] !== old[0]) patch.sources = repo.listSources();
+      if (keys[0] !== old[0]) patch.sources = repo.listSources(true);
       if (keys[1] !== old[1]) patch.articles = repo.listArticles();
       if (keys[2] !== old[2]) patch.tasks = repo.listTasks();
       if (keys[3] !== old[3])
         patch.knowledgeIndex = {
           articles: Number(
-            repo.db.prepare("SELECT count(*) n FROM articles").get()!.n,
+            repo.db
+              .prepare(
+                "SELECT count(*) n FROM articles WHERE json_extract(data,'$.deletedAt') IS NULL",
+              )
+              .get()!.n,
           ),
           chunks: Number(
             repo.db.prepare("SELECT count(*) n FROM knowledge_chunks").get()!.n,
@@ -202,7 +217,7 @@ export function registerIpc(
     },
   );
   handle("state", z.tuple([]), () => ({
-    sources: repo.listSources(),
+    sources: repo.listSources(true),
     articles: repo.listArticles(),
     tasks: repo.listTasks(),
     root: repo.root,
@@ -222,7 +237,7 @@ export function registerIpc(
   );
   handle("login", z.tuple([id]), (sourceId) => {
     const source = repo.getSource(sourceId);
-    if (!source) throw Error("网站不存在");
+    if (!source || source.deletedAt) throw Error("网站不存在或已移除");
     openLogin(source);
   });
   handle("scan", z.tuple([id]), (sourceId) => queue.scan(sourceId));

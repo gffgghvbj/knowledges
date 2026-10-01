@@ -113,7 +113,7 @@ export async function importBackup(
       for (const s of m.sources) if (!repo.getSource(s.id)) repo.putSource(s);
       const previousCurrent = new Map(
         repo
-          .listArticles()
+          .listArticles(true)
           .map((a) => [a.id, repo.getVersion(a.currentVersionId)!]),
       );
       for (const v of m.versions) {
@@ -137,7 +137,7 @@ export async function importBackup(
           next = repo.getVersion(incoming.currentVersionId)!;
         const delta = Date.parse(next.capturedAt) - Date.parse(old.capturedAt);
         if (delta > 0) {
-          repo.putArticle(incoming);
+          repo.putArticle({ ...incoming, deletedAt: existing.deletedAt });
           changedArticles.add(incoming.id);
           report.updated++;
         } else if (delta === 0) {

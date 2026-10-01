@@ -35,7 +35,7 @@ export function BackupPage({
           <div className="empty-icon">↗</div>
           <h3>导出资料库</h3>
           <p>
-            包含文章、图片、历史版本、问答、题库、简历/JD
+            包含文章（含回收站）、图片、历史版本、问答、题库、简历/JD
             文本、面试记录及复习记录。网站登录状态、模型设置和 API Key
             不会放入备份。
           </p>
@@ -70,7 +70,7 @@ export function BackupPage({
           {pending && (
             <div className="import-preview">
               <p>
-                校验通过 · {pending.preview.recordCount} 篇文章 ·{" "}
+                校验通过 · {pending.preview.recordCount} 篇文章（含回收站） ·{" "}
                 {pending.preview.questionCount ?? 0} 条问答 ·{" "}
                 {pending.preview.materialCount ?? 0} 份面试资料 ·{" "}
                 {pending.preview.bankCount ?? 0} 道题 ·{" "}

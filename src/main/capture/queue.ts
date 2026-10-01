@@ -38,7 +38,7 @@ export class CaptureQueue {
   }
   private source(id: string) {
     const s = this.repo.getSource(id);
-    if (!s) throw Error("网站不存在");
+    if (!s || s.deletedAt) throw Error("网站不存在或已移除");
     return s;
   }
   private task(id: string) {
@@ -166,14 +166,15 @@ export class CaptureQueue {
     if (this.active.has(id) || this.stopped) return;
     const promise = this.run(id)
       .catch((error) => {
-        const t = this.task(id);
+        const t = this.repo.getTask(id);
+        if (!t) return;
         t.state = "failed";
         t.error = String(error);
         this.repo.putTask(t);
       })
       .finally(() => {
         this.active.delete(id);
-        if (this.task(id).state === "queued") this.kick(id);
+        if (this.repo.getTask(id)?.state === "queued") this.kick(id);
       });
     this.active.set(id, promise);
   }
@@ -184,7 +185,7 @@ export class CaptureQueue {
   ): Promise<PageResult> {
     let result: PageResult = { kind: "failed", reason: "加载失败" };
     for (let attempt = 0; attempt < 4; attempt++) {
-      if (this.stopped) return result;
+      if (this.stopped || !this.repo.getTask(taskId)) return result;
       try {
         result = await this.transport.load(source, url);
       } catch (error) {
@@ -204,7 +205,7 @@ export class CaptureQueue {
       );
       if (attempt < 3)
         while (remaining > 0) {
-          if (this.stopped || this.task(taskId).state !== "running")
+          if (this.stopped || this.repo.getTask(taskId)?.state !== "running")
             return result;
           const chunk = Math.min(1000, remaining);
           await new Promise((r) => setTimeout(r, chunk));
@@ -220,8 +221,9 @@ export class CaptureQueue {
     task.state = "running";
     this.repo.putTask(task);
     while (!this.stopped) {
-      task = this.task(id);
-      if (task.state !== "running") return;
+      const activeTask = this.repo.getTask(id);
+      if (!activeTask || activeTask.state !== "running") return;
+      task = activeTask;
       const index = task.items.findIndex((i) => i.state === "queued");
       if (index < 0) {
         if (!task.scanComplete) {
@@ -257,7 +259,9 @@ export class CaptureQueue {
       item.state = "running";
       this.repo.putTask(task);
       const result = await this.load(source, item.candidate.canonicalUrl, id);
-      task = this.task(id);
+      const loadedTask = this.repo.getTask(id);
+      if (!loadedTask) return;
+      task = loadedTask;
       if (this.stopped || task.state !== "running") {
         task.items[index].state = "queued";
         this.repo.putTask(task);
@@ -302,8 +306,14 @@ export class CaptureQueue {
             this.repo,
             source,
             article,
-            this.transport.asset,
+            async (source, url) => {
+              if (!this.repo.getTask(id)) throw Error("任务已删除");
+              const result = await this.transport.asset(source, url);
+              if (!this.repo.getTask(id)) throw Error("任务已删除");
+              return result;
+            },
           );
+          if (!this.repo.getTask(id)) return;
           this.repo.saveArticle(
             article,
             assets,
@@ -319,7 +329,8 @@ export class CaptureQueue {
         }
       }
       // A pause may arrive while images are being downloaded; preserve it.
-      const current = this.task(id);
+      const current = this.repo.getTask(id);
+      if (!current) return;
       if (current.state !== "running") task.state = current.state;
       this.repo.putTask(task);
       if (this.interval) await new Promise((r) => setTimeout(r, this.interval));

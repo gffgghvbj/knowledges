@@ -1381,3 +1381,51 @@ details {
 .rule-import {
   max-width: 70%;
 }
+
+button.danger-button {
+  color: #a13d35;
+  border-color: #e1c7c3;
+}
+button.danger-button:hover {
+  background: #fff3f1;
+}
+.library-management {
+  margin-bottom: 16px;
+}
+.article-selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+  flex-wrap: wrap;
+}
+.article-selection label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+.article-selection button {
+  font-size: 13px;
+  padding: 7px 10px;
+}
+.article-select-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 12px;
+}
+.article-select-row > input {
+  flex: 0 0 auto;
+}
+.article-select-row .article-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.library-management button[aria-pressed="true"] {
+  background: #eaf4ee;
+  border-color: #7cad97;
+  color: #21664e;
+}

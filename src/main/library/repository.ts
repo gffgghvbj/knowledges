@@ -75,7 +75,14 @@ export class LibraryRepository {
       url = new URL(entryUrl),
       id = hash(url.origin);
     const existing = this.getSource(id);
-    if (existing) return existing;
+    if (existing) {
+      if (existing.deletedAt) {
+        const restored = { ...existing, entryUrl, deletedAt: undefined };
+        this.putSource(restored);
+        return restored;
+      }
+      return existing;
+    }
     const adapterId =
       url.hostname === "xiaolincoding.com"
         ? "xiaolin"
@@ -98,14 +105,82 @@ export class LibraryRepository {
     this.putSource(source);
     return source;
   }
-  listSources() {
-    return this.all<Source>("sources");
+  listSources(includeDeleted = false) {
+    return this.all<Source>("sources").filter(
+      (s) => includeDeleted || !s.deletedAt,
+    );
+  }
+  deleteSource(id: string) {
+    const source = this.getSource(id);
+    if (!source) return;
+    this.transaction(() => {
+      this.putSource({ ...source, deletedAt: new Date().toISOString() });
+      this.db
+        .prepare("DELETE FROM tasks WHERE json_extract(data,'$.sourceId')=?")
+        .run(id);
+    });
+  }
+  deleteTasks(ids: string[]) {
+    this.transaction(() => {
+      const remove = this.db.prepare("DELETE FROM tasks WHERE id=?");
+      for (const id of new Set(ids)) remove.run(id);
+    });
   }
   getSource(id: string) {
     return this.get<Source>("sources", id);
   }
-  listArticles() {
-    return this.all<Article>("articles");
+  listArticles(includeDeleted = false) {
+    return this.db
+      .prepare(
+        "SELECT data FROM articles" +
+          (includeDeleted
+            ? ""
+            : " WHERE json_extract(data,'$.deletedAt') IS NULL"),
+      )
+      .all()
+      .map((r) => JSON.parse(r.data as string) as Article);
+  }
+  trashedArticles() {
+    return this.db
+      .prepare(
+        "SELECT data FROM articles WHERE json_extract(data,'$.deletedAt') IS NOT NULL ORDER BY json_extract(data,'$.deletedAt') DESC",
+      )
+      .all()
+      .map((r) => JSON.parse(r.data as string) as Article);
+  }
+  trashArticles(ids: string[]) {
+    this.transaction(() => {
+      for (const id of new Set(ids)) {
+        const article = this.getArticle(id);
+        if (!article || article.deletedAt) continue;
+        this.putArticle({ ...article, deletedAt: new Date().toISOString() });
+        this.removeIndex(id);
+      }
+    });
+  }
+  restoreArticles(ids: string[]) {
+    this.transaction(() => {
+      for (const id of new Set(ids)) {
+        const article = this.getArticle(id);
+        if (!article?.deletedAt) continue;
+        const restored = { ...article, deletedAt: undefined };
+        this.putArticle(restored);
+        this.index(restored, this.readArticle(id).markdown);
+      }
+    });
+  }
+  private removeIndex(id: string) {
+    this.db
+      .prepare(
+        "DELETE FROM vector_embeddings WHERE chunk_id IN (SELECT id FROM knowledge_chunks WHERE article_id=?)",
+      )
+      .run(id);
+    this.db.prepare("DELETE FROM knowledge_chunks WHERE article_id=?").run(id);
+    this.db.prepare("DELETE FROM search_docs WHERE id=?").run(id);
+    this.db.prepare("DELETE FROM search_fts WHERE id=?").run(id);
+    this.db
+      .prepare("DELETE FROM article_maintenance WHERE article_id=?")
+      .run(id);
   }
   getArticle(id: string) {
     return this.get<Article>("articles", id);
@@ -154,6 +229,8 @@ export class LibraryRepository {
   ): ArticleVersion {
     const canonicalUrl = normalizeUrl(input.candidate.canonicalUrl),
       articleId = hash(canonicalUrl);
+    const deleted = this.getArticle(articleId);
+    if (deleted?.deletedAt) return this.getVersion(deleted.currentVersionId)!;
     const contentHash = hash(
       input.markdown +
         "\n" +
@@ -238,7 +315,7 @@ export class LibraryRepository {
       FROM articles a LEFT JOIN article_maintenance m ON a.id=m.article_id
       LEFT JOIN (SELECT article_id,count(*) n FROM knowledge_chunks GROUP BY article_id) k ON k.article_id=a.id
       LEFT JOIN (SELECT id,count(*) n FROM search_fts GROUP BY id) f ON f.id=a.id
-      LEFT JOIN search_docs d ON d.id=a.id`,
+      LEFT JOIN search_docs d ON d.id=a.id WHERE json_extract(a.data,'$.deletedAt') IS NULL`,
       )
       .all();
   }
@@ -317,6 +394,10 @@ export class LibraryRepository {
     if (article) this.putArticle({ ...article, sourceStatus: status });
   }
   index(article: Article, text: string) {
+    if (article.deletedAt) {
+      this.removeIndex(article.id);
+      return;
+    }
     this.db
       .prepare(
         `INSERT INTO article_maintenance (article_id) VALUES (?)

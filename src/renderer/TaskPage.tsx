@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { LibraryState, CaptureTask } from "../shared/contracts";
 import type { Run } from "./App";
 import { api } from "./api";
+import { ConfirmDelete } from "./components/ConfirmDelete";
+import { Pagination } from "./components/Pagination";
 const status: Record<string, string> = {
   queued: "等待开始",
   running: "正在采集",
@@ -20,6 +22,15 @@ export function TaskPage({
   run: Run;
   busy: boolean;
 }) {
+  const [deleting, setDeleting] = useState<string[]>([]);
+  const [page, setPage] = useState(0);
+  const safePage = Math.min(
+    page,
+    Math.max(0, Math.ceil(state.tasks.length / 50) - 1),
+  );
+  const completed = state.tasks
+    .filter((t) => t.state === "complete")
+    .map((t) => t.id);
   return (
     <>
       <div className="page-heading">
@@ -28,6 +39,12 @@ export function TaskPage({
           <h2>采集任务</h2>
           <p>查看进度、选择栏目，或从中断的位置继续。</p>
         </div>
+        <button
+          disabled={busy || !completed.length}
+          onClick={() => setDeleting(completed)}
+        >
+          清理已完成任务
+        </button>
       </div>
       {!state.tasks.length && (
         <div className="empty-card">
@@ -35,7 +52,7 @@ export function TaskPage({
           <p>在「网站来源」中添加网站并开始扫描。</p>
         </div>
       )}
-      {state.tasks.map((t) => (
+      {state.tasks.slice(safePage * 50, (safePage + 1) * 50).map((t) => (
         <TaskCard
           key={t.id}
           task={t}
@@ -44,8 +61,27 @@ export function TaskPage({
           }
           run={run}
           busy={busy}
+          onDelete={() => setDeleting([t.id])}
         />
       ))}
+      <Pagination
+        page={safePage}
+        total={state.tasks.length}
+        onChange={setPage}
+      />
+      {deleting.length > 0 && (
+        <ConfirmDelete
+          title="删除采集任务？"
+          description={`将删除 ${deleting.length} 条任务记录，删除后不能继续或重试这些任务。进行中的请求不再保存后续采集结果；已采集文章不会删除。`}
+          onCancel={() => setDeleting([])}
+          onConfirm={() =>
+            run(async () => {
+              await api.deleteTasks(deleting);
+              setDeleting([]);
+            })
+          }
+        />
+      )}
     </>
   );
 }
@@ -54,8 +90,10 @@ function TaskCard({
   label,
   run,
   busy,
+  onDelete,
 }: {
   task: CaptureTask;
+  onDelete: () => void;
   label: string;
   run: Run;
   busy: boolean;
@@ -152,6 +190,9 @@ function TaskCard({
         </div>
       )}
       <div className="card-actions">
+        <button className="danger-button" disabled={busy} onClick={onDelete}>
+          删除任务
+        </button>
         {["running", "queued"].includes(t.state) && (
           <button onClick={() => run(() => api.control(t.id, "pause"))}>
             暂停

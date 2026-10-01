@@ -26,7 +26,7 @@ export function registerRuleIpc(
     z.tuple([id, extractionSelectionSchema]),
     (id, raw) => {
       const source = repo.getSource(id);
-      if (!source) throw Error("网站不存在");
+      if (!source || source.deletedAt) throw Error("网站不存在或已移除");
       if (
         queue.isActive(id) ||
         repo
@@ -74,7 +74,7 @@ export function registerRuleIpc(
     async (id, url, raw) => {
       if (previewing) throw Error("正在预览网页，请稍候");
       const original = repo.getSource(id);
-      if (!original) throw Error("网站不存在");
+      if (!original || original.deletedAt) throw Error("网站不存在或已移除");
       const source = { ...original, extraction: validateSelection(raw) };
       const target = normalizeUrl(url);
       if (!source.allowedOrigins.includes(new URL(target).origin))
