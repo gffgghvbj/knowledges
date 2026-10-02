@@ -85,7 +85,10 @@ export class SyncPusher {
     const bigField =
       item.data_base64 !== undefined ? "data_base64" : "markdown";
     const value = String(item[bigField]);
-    const chunkId = `${kind}:${item.id}`;
+    // 图片条目没有 id（用 hash），缺省时必须兜底，否则所有分块混入同一组
+    const chunkKey = String(item.id ?? item.hash ?? "");
+    if (!chunkKey) throw Error("分块传输缺少条目标识");
+    const chunkId = `${kind}:${chunkKey}`;
     const parts: string[] = [];
     for (let i = 0; i < value.length; i += SyncPusher.CHUNK_BYTES)
       parts.push(value.slice(i, i + SyncPusher.CHUNK_BYTES));
