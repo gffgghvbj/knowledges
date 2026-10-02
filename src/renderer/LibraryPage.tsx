@@ -1,3 +1,4 @@
+import { ExtractionDialog } from "./ExtractionDialog";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   LibraryState,
@@ -8,7 +9,16 @@ import type { Run } from "./App";
 import { api } from "./api";
 import { Reader } from "./components/Reader";
 import { ConfirmDelete } from "./components/ConfirmDelete";
-export function LibraryPage({ state, run }: { state: LibraryState; run: Run }) {
+export function LibraryPage({
+  state,
+  run,
+  onTask,
+}: {
+  state: LibraryState;
+  run: Run;
+  onTask: () => void;
+}) {
+  const [recapture, setRecapture] = useState(false);
   const [query, setQuery] = useState(""),
     [trash, setTrash] = useState(false),
     [trashed, setTrashed] = useState<Article[]>([]),
@@ -292,6 +302,19 @@ export function LibraryPage({ state, run }: { state: LibraryState; run: Run }) {
           {value ? (
             <>
               <div className="version-bar">
+                {!trash && (
+                  <button
+                    disabled={
+                      !state.sources.some(
+                        (s) => s.id === value.article.sourceId && !s.deletedAt,
+                      )
+                    }
+                    title="来源已移除时，请先重新添加网站"
+                    onClick={() => setRecapture(true)}
+                  >
+                    预览 / 单篇重采
+                  </button>
+                )}
                 <button
                   className={trash ? "" : "danger-button"}
                   onClick={() =>
@@ -341,6 +364,19 @@ export function LibraryPage({ state, run }: { state: LibraryState; run: Run }) {
           )}
         </div>
       </div>
+      {recapture &&
+        value &&
+        state.sources.find(
+          (s) => s.id === value.article.sourceId && !s.deletedAt,
+        ) && (
+          <ExtractionDialog
+            source={state.sources.find((s) => s.id === value.article.sourceId)!}
+            initialUrl={value.article.canonicalUrl}
+            run={run}
+            onClose={() => setRecapture(false)}
+            onCaptured={onTask}
+          />
+        )}
       {deleting.length > 0 && (
         <ConfirmDelete
           title="将文章移入回收站？"

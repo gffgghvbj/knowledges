@@ -154,7 +154,7 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <span className="status-dot" /> 本地资料库 <small>v0.8.0</small>
+          <span className="status-dot" /> 本地资料库 <small>v0.9.0</small>
           <p>资料属于你，随时可以带走。</p>
         </div>
       </aside>
@@ -219,7 +219,13 @@ export function App() {
             />
           )}
           {view === "tasks" && <TaskPage state={state} run={run} busy={busy} />}
-          {view === "library" && <LibraryPage state={state} run={run} />}
+          {view === "library" && (
+            <LibraryPage
+              state={state}
+              run={run}
+              onTask={() => setView("tasks")}
+            />
+          )}
           {view === "backup" && (
             <BackupPage state={state} run={run} busy={busy} />
           )}

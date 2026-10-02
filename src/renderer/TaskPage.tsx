@@ -1,3 +1,5 @@
+import { CaptureItems } from "./CaptureItems";
+import type { Source } from "../shared/contracts";
 import { useState } from "react";
 import type { LibraryState, CaptureTask } from "../shared/contracts";
 import type { Run } from "./App";
@@ -56,6 +58,8 @@ export function TaskPage({
         <TaskCard
           key={t.id}
           task={t}
+          latest={state.tasks[0]?.id === t.id}
+          source={state.sources.find((s) => s.id === t.sourceId)}
           label={
             state.sources.find((s) => s.id === t.sourceId)?.label || "网站"
           }
@@ -87,12 +91,16 @@ export function TaskPage({
 }
 function TaskCard({
   task: t,
+  latest,
+  source,
   label,
   run,
   busy,
   onDelete,
 }: {
   task: CaptureTask;
+  latest: boolean;
+  source?: Source;
   onDelete: () => void;
   label: string;
   run: Run;
@@ -102,7 +110,9 @@ function TaskCard({
   const sections = [
     ...new Set(t.items.map((i) => i.candidate.sectionPath[0] || "其他")),
   ];
-  const done = t.items.filter((i) => i.state === "complete").length;
+  const done = t.items.filter((i) =>
+    ["complete", "partial", "failed", "skipped"].includes(i.state),
+  ).length;
   const isScan = t.mode === "scan";
   return (
     <section className="task-card">
@@ -141,7 +151,8 @@ function TaskCard({
             t.items.filter((i) => ["failed", "partial"].includes(i.state))
               .length
           }{" "}
-          项待处理
+          项失败或图片待补全 ·{" "}
+          {t.items.filter((i) => i.quality?.issues.length).length} 项质量提示
         </span>
       </div>
       {t.error && <p className="error-text">{t.error}</p>}
@@ -189,6 +200,13 @@ function TaskCard({
           </button>
         </div>
       )}
+      <CaptureItems
+        task={t}
+        source={source}
+        run={run}
+        busy={busy}
+        latest={latest}
+      />
       <div className="card-actions">
         <button className="danger-button" disabled={busy} onClick={onDelete}>
           删除任务

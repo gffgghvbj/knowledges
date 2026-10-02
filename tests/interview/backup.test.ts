@@ -68,7 +68,7 @@ test("interview backups retain independent snapshots and merge conflicts idempot
     await importBackup(b, file);
     expect(rb.listSessions()).toHaveLength(2);
     const checked = await validateBackup(file);
-    expect(checked.manifest.formatVersion).toBe(7);
+    expect(checked.manifest.formatVersion).toBe(8);
     await checked.dispose();
   } finally {
     a.close();

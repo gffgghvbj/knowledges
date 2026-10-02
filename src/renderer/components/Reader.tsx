@@ -1,3 +1,4 @@
+import { QualityNotice } from "./QualityNotice";
 import { memo, useMemo } from "react";
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
@@ -49,6 +50,7 @@ export const Reader = memo(function Reader({
           打开 Markdown
         </button>
       </div>
+      <QualityNotice quality={value.version.quality} />
       <article
         className="markdown"
         onClick={(e) => {

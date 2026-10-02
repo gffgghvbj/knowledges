@@ -1,3 +1,4 @@
+import { QualityNotice } from "./components/QualityNotice";
 import { useMemo, useState } from "react";
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
@@ -22,7 +23,11 @@ export function ExtractionDialog({
   source,
   run,
   onClose,
+  initialUrl,
+  onCaptured,
 }: {
+  initialUrl?: string;
+  onCaptured?: () => void;
   source: Source;
   run: Run;
   onClose: () => void;
@@ -35,7 +40,7 @@ export function ExtractionDialog({
   const [json, setJson] = useState(
     JSON.stringify(resolveExtractionRule(source), null, 2),
   );
-  const [url, setUrl] = useState(source.entryUrl);
+  const [url, setUrl] = useState(initialUrl ?? source.entryUrl);
   const [preview, setPreview] = useState<ExtractionPreview | null>(null);
   const [tab, setTab] = useState("rendered");
   const [busy, setBusy] = useState(false);
@@ -82,7 +87,9 @@ export function ExtractionDialog({
             关闭
           </button>
         </div>
-        <p>保存规则后，在网站来源点击“更新”重新采集。已有文章保留历史版本。</p>
+        <p>
+          单篇采集只处理下方地址，保留已有历史版本，不改变网站更新范围。临时规则仅用于本次；保存到网站后才影响后续任务。
+        </p>
         {error && (
           <p role="alert" className="error-banner">
             {error}
@@ -199,6 +206,19 @@ export function ExtractionDialog({
           <button
             disabled={busy}
             onClick={() =>
+              void act(async () => {
+                await api.captureUrl(source.id, url, await current());
+                await run(async () => {});
+                onClose();
+                onCaptured?.();
+              })
+            }
+          >
+            按当前规则采集此页
+          </button>
+          <button
+            disabled={busy}
+            onClick={() =>
               void act(async () =>
                 setPreview(
                   await api.previewExtraction(source.id, url, await current()),
@@ -231,6 +251,7 @@ export function ExtractionDialog({
               {preview.linkCount} 条符合扫描规则的链接
             </p>
             <small>预览不写入资料库，也不下载图片。</small>
+            <QualityNotice quality={preview.quality} />
             <div className="card-actions">
               <button
                 aria-pressed={tab === "rendered"}

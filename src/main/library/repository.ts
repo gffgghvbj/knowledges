@@ -1,3 +1,4 @@
+import type { CaptureQuality } from "../../shared/capture-quality";
 import type { ExtractionSelection } from "../../shared/extraction";
 import { validateSelection } from "../capture/adapters/rules";
 import type { QaSummary } from "../../shared/lists";
@@ -226,6 +227,7 @@ export class LibraryRepository {
     input: ExtractedArticle,
     assets: Asset[],
     completeness: ArticleVersion["completeness"] = "complete",
+    quality?: CaptureQuality,
   ): ArticleVersion {
     const canonicalUrl = normalizeUrl(input.candidate.canonicalUrl),
       articleId = hash(canonicalUrl);
@@ -253,6 +255,7 @@ export class LibraryRepository {
       markdownPath,
       assets,
       completeness,
+      ...(quality ? { quality } : {}),
     };
     const markdown = this.renderAssets(input.markdown, assets, markdownPath);
     atomicWrite(this.resolvePath(markdownPath), markdown);

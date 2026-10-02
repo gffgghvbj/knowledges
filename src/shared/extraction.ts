@@ -1,3 +1,4 @@
+import type { CaptureQuality } from "./capture-quality";
 import type { z } from "zod";
 import type {
   extractionRuleSchema,
@@ -61,6 +62,7 @@ export function resolveExtractionRule(source: {
   return extractionPresets[name as keyof typeof extractionPresets] ?? common;
 }
 export interface ExtractionPreview {
+  quality: CaptureQuality;
   title: string;
   markdown: string;
   ruleName: string;

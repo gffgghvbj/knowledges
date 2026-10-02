@@ -31,6 +31,7 @@ export const manifestSchema = z.object({
     z.literal(5),
     z.literal(6),
     z.literal(7),
+    z.literal(8),
   ]),
   interviewReviews: z.array(reviewSchema).max(100000).default([]),
   interviewMaterials: z.array(materialSchema).max(10000).default([]),
@@ -50,6 +51,7 @@ export const manifestSchema = z.object({
         .string()
         .refine((s) => ["generic", "xiaolin", "javaguide"].includes(s)),
       label: z.string(),
+      selectedUrls: z.array(web).max(10000).optional(),
       selectedSections: z.array(z.string()).optional(),
     }),
   ),
@@ -74,6 +76,27 @@ export const manifestSchema = z.object({
       capturedAt: time,
       markdownPath: z.string(),
       assets: z.array(asset),
+      quality: z
+        .object({
+          checkedAt: time,
+          textLength: z.number().int().nonnegative(),
+          codeBlocks: z.number().int().nonnegative(),
+          issues: z
+            .array(
+              z.object({
+                code: z.enum([
+                  "short-text",
+                  "login-prompt",
+                  "missing-images",
+                  "empty-code",
+                  "link-heavy",
+                ]),
+                message: z.string().max(500),
+              }),
+            )
+            .max(5),
+        })
+        .optional(),
       completeness: z.enum(["complete", "assets-pending"]),
     }),
   ),

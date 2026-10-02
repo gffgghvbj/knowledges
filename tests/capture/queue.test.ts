@@ -306,3 +306,96 @@ test("server retry-after is honored even when longer than one minute", async () 
     vi.useRealTimers();
   }
 });
+
+test("article selection restricts capture and later updates; section selection resets scope", async () => {
+  const s = repo.addSource("https://example.com/");
+  const calls: string[] = [];
+  const q = new CaptureQueue(
+    repo,
+    {
+      load: async (_s, u) => {
+        calls.push(u);
+        return page(
+          u,
+          '<h1>文章</h1><a href="/docs/a">A</a><a href="/docs/b">B</a>',
+        );
+      },
+      asset: async () => {
+        throw Error("unused");
+      },
+    },
+    0,
+  );
+  const scan = q.scan(s.id);
+  await q.waitForIdle();
+  calls.length = 0;
+  expect(() => q.captureArticles(scan, ["https://other.com/a"])).toThrow(
+    "扫描结果",
+  );
+  const capture = q.captureArticles(scan, [
+    "https://example.com/docs/a#anchor",
+  ]);
+  await q.waitForIdle();
+  expect(calls).toEqual(["https://example.com/docs/a"]);
+  expect(repo.getTask(capture)?.items[0].quality?.issues[0].code).toBe(
+    "short-text",
+  );
+  expect(
+    repo.readArticle(repo.listArticles()[0].id).version.quality,
+  ).toBeDefined();
+  calls.length = 0;
+  q.scan(s.id, "update");
+  await q.waitForIdle();
+  expect(calls).toEqual(["https://example.com/docs/a"]);
+  q.captureSelection(scan, ["docs"]);
+  await q.waitForIdle();
+  expect(repo.getSource(s.id)?.selectedUrls).toBeUndefined();
+  expect(repo.listArticles()).toHaveLength(2);
+});
+
+test("one-page rule is task scoped, keeps history and never restores trashed articles", async () => {
+  const s = repo.addSource("https://example.com/");
+  const calls: string[] = [];
+  let body = "<h1>旧内容</h1><p>first</p>";
+  const q = new CaptureQueue(
+    repo,
+    {
+      load: async (_s, u) => {
+        calls.push(u);
+        return page(u, body);
+      },
+      asset: async () => {
+        throw Error("unused");
+      },
+    },
+    0,
+  );
+  expect(() => q.captureUrl(s.id, "https://other.com/a")).toThrow("当前网站");
+  q.captureUrl(s.id, "https://example.com/a");
+  await q.waitForIdle();
+  const a = repo.listArticles()[0],
+    before = repo.readArticle(a.id);
+  const { extractionPresets } = await import("../../src/shared/extraction");
+  body =
+    '<h1>新内容</h1><p class="promo">去掉广告</p><p>second</p><a href="/b">不要跟随</a>';
+  q.captureUrl(s.id, a.canonicalUrl, {
+    preset: "custom",
+    rule: { ...extractionPresets.generic, removeSelectors: [".promo"] },
+  });
+  await q.waitForIdle();
+  expect(calls).toEqual([a.canonicalUrl, a.canonicalUrl]);
+  expect(repo.listVersions(a.id)).toHaveLength(2);
+  expect(repo.readArticle(a.id, before.version.id).markdown).toBe(
+    before.markdown,
+  );
+  expect(repo.readArticle(a.id).markdown).not.toContain("去掉广告");
+  expect(repo.getSource(s.id)).toEqual(s);
+  repo.trashArticles([a.id]);
+  expect(() => q.captureUrl(s.id, a.canonicalUrl)).toThrow("回收站");
+  calls.length = 0;
+  const skipped = q.startCapture(s.id, [a]);
+  await q.waitForIdle();
+  expect(calls).toEqual([]);
+  expect(repo.getTask(skipped)?.items[0].state).toBe("skipped");
+  expect(repo.getArticle(a.id)?.deletedAt).toBeDefined();
+});

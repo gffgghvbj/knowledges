@@ -104,7 +104,7 @@ test("v5 upgrade initializes maintenance once; partial async upgrade can resume"
     const index = vi.spyOn(LibraryRepository.prototype, "index");
     repo = new LibraryRepository(root);
     expect(index).toHaveBeenCalledTimes(5);
-    expect(repo.db.prepare("PRAGMA user_version").get()!.user_version).toBe(9);
+    expect(repo.db.prepare("PRAGMA user_version").get()!.user_version).toBe(10);
     index.mockClear();
     repo.close();
     repo = new LibraryRepository(root);

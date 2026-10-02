@@ -1,3 +1,4 @@
+import type { CaptureQuality } from "./capture-quality";
 import type {
   ExtractionSelection,
   ExtractionRule,
@@ -33,6 +34,7 @@ export interface Source {
   adapterId: string;
   label: string;
   selectedSections?: string[];
+  selectedUrls?: string[];
 }
 export interface Candidate {
   sourceId: string;
@@ -66,6 +68,11 @@ export interface Asset {
   size: number;
 }
 export interface ExtractedArticle {
+  extractionStats?: {
+    codeBlocks: number;
+    emptyCodeBlocks: number;
+    missingImageSources: number;
+  };
   candidate: Candidate;
   markdown: string;
   text: string;
@@ -80,6 +87,7 @@ export interface Article extends Candidate {
   lastSeenAt: string;
 }
 export interface ArticleVersion {
+  quality?: CaptureQuality;
   id: string;
   articleId: string;
   contentHash: string;
@@ -97,11 +105,14 @@ export type TaskState =
   | "failed"
   | "complete";
 export interface QueueItem {
+  quality?: CaptureQuality;
+  note?: string;
   candidate: Candidate;
-  state: "queued" | "running" | "complete" | "failed" | "partial";
+  state: "queued" | "running" | "complete" | "failed" | "partial" | "skipped";
   error?: string;
 }
 export interface CaptureTask {
+  extraction?: ExtractionSelection;
   id: string;
   sourceId: string;
   state: TaskState;
@@ -148,6 +159,12 @@ export interface StartupStatus {
   error?: string;
 }
 export interface LibraryApi {
+  captureArticles(taskId: string, urls: string[]): Promise<string>;
+  captureUrl(
+    sourceId: string,
+    url: string,
+    selection?: ExtractionSelection,
+  ): Promise<string>;
   deleteSource(id: string): Promise<void>;
   deleteTasks(ids: string[]): Promise<void>;
   trashArticles(ids: string[]): Promise<void>;

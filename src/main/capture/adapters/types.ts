@@ -146,6 +146,12 @@ export function getAdapter(source: Source): SiteAdapter {
           heading.appendChild(strong);
           summary.replaceWith(heading);
         }
+      const blocks = [...body.querySelectorAll("pre")];
+      const extractionStats = {
+        codeBlocks: blocks.length,
+        emptyCodeBlocks: blocks.filter((p) => !p.textContent?.trim()).length,
+        missingImageSources: 0,
+      };
       const assets: ExtractedArticle["assets"] = [];
       for (const img of body.querySelectorAll("img")) {
         const raw =
@@ -153,12 +159,16 @@ export function getAdapter(source: Source): SiteAdapter {
           img.getAttribute("data-original") ||
           img.getAttribute("src");
         try {
-          if (!raw) continue;
+          if (!raw) {
+            extractionStats.missingImageSources++;
+            continue;
+          }
           const remoteUrl = normalizeUrl(new URL(raw, snapshot.finalUrl).href),
             localRef = `image-ref:${hash(remoteUrl)}`;
           assets.push({ remoteUrl, localRef });
           img.setAttribute("src", localRef);
         } catch {
+          extractionStats.missingImageSources++;
           img.remove();
         }
       }
@@ -179,6 +189,7 @@ export function getAdapter(source: Source): SiteAdapter {
       converter.use(gfm);
       const markdown = converter.turndown(body.innerHTML);
       return {
+        extractionStats,
         candidate: { ...candidate, title },
         markdown: markdown.startsWith("# ")
           ? markdown

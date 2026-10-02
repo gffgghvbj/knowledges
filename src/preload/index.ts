@@ -68,6 +68,8 @@ const names = [
   "login",
   "scan",
   "capture",
+  "captureArticles",
+  "captureUrl",
   "update",
   "control",
   "read",

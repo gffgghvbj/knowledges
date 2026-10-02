@@ -1,3 +1,4 @@
+import { inspectQuality } from "./quality";
 import { resolveExtractionRule } from "../../shared/extraction";
 import { dialog, type BrowserWindow } from "electron";
 import { writeFile } from "node:fs/promises";
@@ -98,6 +99,7 @@ export function registerRuleIpc(
         if (article.markdown.length > 200000)
           throw Error("提取内容超过预览上限，请缩小正文选择范围");
         return {
+          quality: inspectQuality(article),
           title: article.candidate.title,
           markdown: article.markdown,
           ruleName: resolveExtractionRule(source).name,

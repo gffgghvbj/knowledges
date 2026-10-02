@@ -226,7 +226,14 @@ function validateRelations(m: Manifest, files: Set<string>) {
   for (const s of m.sources)
     if (
       s.id !== hash(new URL(s.entryUrl).origin) ||
-      s.allowedOrigins.some((o) => o !== new URL(s.entryUrl).origin)
+      s.allowedOrigins.some((o) => o !== new URL(s.entryUrl).origin) ||
+      (s.selectedUrls &&
+        (new Set(s.selectedUrls).size !== s.selectedUrls.length ||
+          s.selectedUrls.some(
+            (url) =>
+              normalizeUrl(url) !== url ||
+              !s.allowedOrigins.includes(new URL(url).origin),
+          )))
     )
       throw Error("备份来源范围无效");
   for (const a of m.articles)

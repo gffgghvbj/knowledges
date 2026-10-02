@@ -125,7 +125,15 @@ export function SourcePage({
                       : "尚未采集"}
                   </span>
                 </div>
+                <p className="source-link">
+                  {s.selectedUrls?.length
+                    ? `更新范围：最近一次逐篇选择的 ${s.selectedUrls.length} 个链接`
+                    : "更新范围：按栏目扫描发现文章"}
+                </p>
                 <div className="card-actions">
+                  <button disabled={busy} onClick={() => setEditing(s)}>
+                    单篇采集
+                  </button>
                   <button
                     className="danger-button"
                     disabled={busy}
@@ -193,6 +201,7 @@ export function SourcePage({
       {editing && (
         <ExtractionDialog
           source={editing}
+          onCaptured={onTask}
           run={run}
           onClose={() => setEditing(null)}
         />

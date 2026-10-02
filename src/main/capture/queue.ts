@@ -1,3 +1,10 @@
+import { inspectQuality } from "./quality";
+import { hash, normalizeUrl } from "../library/files";
+import {
+  resolveExtractionRule,
+  type ExtractionSelection,
+} from "../../shared/extraction";
+import { validateSelection } from "./adapters/rules";
 import { randomUUID } from "node:crypto";
 import type {
   Source,
@@ -61,18 +68,33 @@ export class CaptureQueue {
     sourceId: string,
     candidates: Candidate[],
     mode: CaptureTask["mode"],
+    skipDiscovery = false,
+    extraction?: ExtractionSelection,
   ) {
     this.assertAvailable(sourceId);
-    this.source(sourceId);
+    const source = this.source(sourceId);
+    if (!candidates.length) throw Error("请选择至少一篇文章");
+    for (const c of candidates) {
+      if (
+        c.sourceId !== sourceId ||
+        !source.allowedOrigins.includes(
+          new URL(normalizeUrl(c.canonicalUrl)).origin,
+        )
+      )
+        throw Error("文章地址不在当前网站范围内");
+    }
     const task: CaptureTask = {
       id: randomUUID(),
       sourceId,
+      extraction: validateSelection(
+        extraction ?? { preset: "custom", rule: resolveExtractionRule(source) },
+      ),
       state: "queued",
       items: [
         ...new Map(candidates.map((c) => [c.canonicalUrl, c])).values(),
       ].map((candidate) => ({ candidate, state: "queued" })),
       createdAt: new Date().toISOString(),
-      scanComplete: mode === "capture",
+      scanComplete: mode === "capture" || skipDiscovery,
       discovered: candidates.length,
       mode,
     };
@@ -85,6 +107,14 @@ export class CaptureQueue {
   }
   scan(sourceId: string, mode: "scan" | "update" = "scan") {
     const s = this.source(sourceId);
+    if (mode === "update" && s.selectedUrls?.length) {
+      const candidates = s.selectedUrls
+        .map((url) => this.candidateFor(sourceId, url))
+        .filter((c) => !this.repo.getArticle(hash(c.canonicalUrl))?.deletedAt);
+      if (!candidates.length)
+        throw Error("已选文章均在回收站，请恢复文章或重新选择采集范围");
+      return this.create(sourceId, candidates, "update", true);
+    }
     const saved =
       mode === "update"
         ? this.repo
@@ -118,6 +148,12 @@ export class CaptureQueue {
       throw Error("请等待扫描结束");
     if (!sections.length) throw Error("请选择至少一个栏目");
     const source = this.source(task.sourceId);
+    this.assertAvailable(source.id);
+    const candidates = task.items
+      .filter((i) => sections.includes(i.candidate.sectionPath[0] || "其他"))
+      .map((i) => i.candidate);
+    if (!candidates.length) throw Error("所选栏目没有文章");
+    source.selectedUrls = undefined;
     source.selectedSections = sections;
     this.repo.putSource(source);
     return this.startCapture(
@@ -126,6 +162,45 @@ export class CaptureQueue {
         .filter((i) => sections.includes(i.candidate.sectionPath[0] || "其他"))
         .map((i) => i.candidate),
     );
+  }
+  private candidateFor(sourceId: string, input: string): Candidate {
+    const source = this.source(sourceId),
+      url = normalizeUrl(input);
+    if (!source.allowedOrigins.includes(new URL(url).origin))
+      throw Error("文章地址不在当前网站范围内");
+    const existing = this.repo.getArticle(hash(url));
+    return {
+      sourceId,
+      canonicalUrl: url,
+      title: existing?.title ?? url,
+      sectionPath:
+        existing?.sectionPath ??
+        new URL(url).pathname.split("/").filter(Boolean).slice(0, -1),
+    };
+  }
+  captureUrl(sourceId: string, url: string, selection?: ExtractionSelection) {
+    const candidate = this.candidateFor(sourceId, url);
+    if (this.repo.getArticle(hash(candidate.canonicalUrl))?.deletedAt)
+      throw Error("文章在回收站，请先恢复后再重采");
+    return this.create(sourceId, [candidate], "capture", true, selection);
+  }
+  captureArticles(taskId: string, urls: string[]) {
+    const task = this.task(taskId);
+    if (!task.scanComplete || task.mode !== "scan")
+      throw Error("请等待扫描结束");
+    const selected = new Set(urls.map(normalizeUrl));
+    if (!selected.size) throw Error("请选择至少一篇文章");
+    const candidates = task.items
+      .filter((i) => selected.has(i.candidate.canonicalUrl))
+      .map((i) => i.candidate);
+    if (candidates.length !== selected.size)
+      throw Error("所选文章不在扫描结果中");
+    const source = this.source(task.sourceId);
+    this.assertAvailable(source.id);
+    source.selectedUrls = [...selected];
+    source.selectedSections = undefined;
+    this.repo.putSource(source);
+    return this.startCapture(source.id, candidates);
   }
   pauseTask(id: string) {
     const t = this.task(id);
@@ -216,7 +291,11 @@ export class CaptureQueue {
   }
   private async run(id: string) {
     let task = this.task(id);
-    const source = this.source(task.sourceId),
+    const original = this.source(task.sourceId);
+    const source = {
+        ...original,
+        extraction: task.extraction ?? original.extraction,
+      },
       adapter = getAdapter(source);
     task.state = "running";
     this.repo.putTask(task);
@@ -256,6 +335,18 @@ export class CaptureQueue {
         return;
       }
       const item = task.items[index];
+      if (
+        task.scanComplete &&
+        this.repo.getArticle(hash(item.candidate.canonicalUrl))?.deletedAt
+      ) {
+        item.state = "skipped";
+        item.note = "文章在回收站，已跳过。";
+        this.repo.putTask(task);
+        continue;
+      }
+      item.error = undefined;
+      item.note = undefined;
+      item.quality = undefined;
       item.state = "running";
       this.repo.putTask(task);
       const result = await this.load(source, item.candidate.canonicalUrl, id);
@@ -269,6 +360,17 @@ export class CaptureQueue {
       }
       if (result.kind === "login-required") {
         task.items[index].state = "queued";
+        task.items[index].quality = {
+          checkedAt: new Date().toISOString(),
+          textLength: 0,
+          codeBlocks: 0,
+          issues: [
+            {
+              code: "login-prompt",
+              message: "网站要求登录，请先登录后继续任务。",
+            },
+          ],
+        };
         task.state = "login-required";
         this.repo.putTask(task);
         return;
@@ -290,10 +392,9 @@ export class CaptureQueue {
             task.items.push({ candidate: c, state: "queued" });
           }
         try {
-          task.items[index].candidate = adapter.extract(
-            result.snapshot,
-            item.candidate,
-          ).candidate;
+          const extracted = adapter.extract(result.snapshot, item.candidate);
+          task.items[index].candidate = extracted.candidate;
+          task.items[index].quality = inspectQuality(extracted);
         } catch {
           /* Navigation-only pages still discover links. */
         }
@@ -314,15 +415,28 @@ export class CaptureQueue {
             },
           );
           if (!this.repo.getTask(id)) return;
-          this.repo.saveArticle(
-            article,
-            assets,
-            missing.length ? "assets-pending" : "complete",
-          );
-          task.items[index].state = missing.length ? "partial" : "complete";
-          task.items[index].error = missing.length
-            ? `${missing.length} 张图片未下载，可重试。${missing.slice(0, 3).join("；")}`
-            : undefined;
+          if (
+            this.repo.getArticle(hash(article.candidate.canonicalUrl))
+              ?.deletedAt
+          ) {
+            task.items[index].state = "skipped";
+            task.items[index].note = "文章在回收站，已跳过。";
+          } else {
+            const quality = inspectQuality(article, missing.length);
+            this.repo.saveArticle(
+              article,
+              assets,
+              missing.length ? "assets-pending" : "complete",
+              quality,
+            );
+            task.items[index].quality = quality;
+            task.items[index].state = missing.length ? "partial" : "complete";
+          }
+          task.items[index].candidate = article.candidate;
+          task.items[index].error =
+            task.items[index].state !== "skipped" && missing.length
+              ? `${missing.length} 张图片未下载，可重试。${missing.slice(0, 3).join("；")}`
+              : undefined;
         } catch (error) {
           task.items[index].state = "failed";
           task.items[index].error = String(error);

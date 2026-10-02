@@ -246,6 +246,16 @@ export function registerIpc(
     z.tuple([id, z.array(text).max(10000)]),
     (taskId, sections) => queue.captureSelection(taskId, sections),
   );
+  handle(
+    "captureArticles",
+    z.tuple([id, z.array(text).min(1).max(10000)]),
+    (taskId, urls) => queue.captureArticles(taskId, urls),
+  );
+  handle(
+    "captureUrl",
+    z.tuple([id, text, extractionSelectionSchema.optional()]),
+    (sourceId, url, selection) => queue.captureUrl(sourceId, url, selection),
+  );
   handle("update", z.tuple([id]), (sourceId) => queue.scan(sourceId, "update"));
   handle(
     "control",
