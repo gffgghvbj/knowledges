@@ -72,37 +72,56 @@ export class SyncPusher {
     if (result.code !== 0) throw Error(result.msg ?? "云端处理失败");
     return result as Record<string, unknown>;
   }
-  // 网关单请求限制约 100KB，按 48KB/块切分大字段（markdown/图片 base64）
-  private static readonly CHUNK_BYTES = 48 * 1024;
-  private static readonly SAFE_BATCH = 60 * 1024;
+  // 网关单请求限制约 100KB（按 UTF-8 字节计）。
+  // 统一采用「行级分块」：超过阈值的条目整体序列化为 JSON 后按字节切块（字符边界对齐），
+  // 云端拼回 JSON 再处理。中文 3 字节/字符，按字符切会 3 倍超限——必须按字节。
+  private static readonly CHUNK_BYTES = 24 * 1024;
+  private static readonly SAFE_BATCH = 24 * 1024;
+
+  /** 按 UTF-8 字节切块，回退到字符边界避免拆散多字节字符 */
+  private static chunkUtf8(value: string, maxBytes: number): string[] {
+    const buf = Buffer.from(value, "utf8");
+    const parts: string[] = [];
+    let start = 0;
+    while (start < buf.length) {
+      let end = Math.min(start + maxBytes, buf.length);
+      if (end < buf.length)
+        while (end > start && (buf[end] & 0xc0) === 0x80) end--;
+      parts.push(buf.subarray(start, end).toString("utf8"));
+      start = end;
+    }
+    return parts;
+  }
 
   private async sendItem(
     kind: string,
     item: PushRow,
   ): Promise<Record<string, unknown> | null> {
-    if (JSON.stringify(item).length <= SyncPusher.SAFE_BATCH)
+    const serialized = JSON.stringify(item);
+    if (Buffer.byteLength(serialized, "utf8") <= SyncPusher.SAFE_BATCH)
       return this.call("/push", { kind, items: [item] });
-    const bigField =
-      item.data_base64 !== undefined ? "data_base64" : "markdown";
-    const value = String(item[bigField]);
-    // 图片条目没有 id（用 hash），缺省时必须兜底，否则所有分块混入同一组
     const chunkKey = String(item.id ?? item.hash ?? "");
     if (!chunkKey) throw Error("分块传输缺少条目标识");
     const chunkId = `${kind}:${chunkKey}`;
-    const parts: string[] = [];
-    for (let i = 0; i < value.length; i += SyncPusher.CHUNK_BYTES)
-      parts.push(value.slice(i, i + SyncPusher.CHUNK_BYTES));
+    const parts = SyncPusher.chunkUtf8(
+      serialized,
+      SyncPusher.CHUNK_BYTES,
+    );
     let last: Record<string, unknown> | null = null;
     for (let i = 0; i < parts.length; i++) {
-      const row: PushRow = { ...item };
-      delete row[bigField];
-      row.__chunk = {
-        id: chunkId,
-        index: i,
-        total: parts.length,
-        data: parts[i],
-      };
-      last = await this.call("/push", { kind, items: [row] });
+      last = await this.call("/push", {
+        kind,
+        items: [
+          {
+            __chunk: {
+              id: chunkId,
+              index: i,
+              total: parts.length,
+              data: parts[i],
+            },
+          },
+        ],
+      });
     }
     return last;
   }
@@ -116,7 +135,7 @@ export class SyncPusher {
       size = 0;
     };
     for (const item of items) {
-      const bytes = JSON.stringify(item).length;
+      const bytes = Buffer.byteLength(JSON.stringify(item), "utf8");
       if (bytes > SyncPusher.SAFE_BATCH) {
         await flush();
         await this.sendItem(kind, item);
@@ -202,10 +221,11 @@ export class SyncPusher {
           data_base64: bytes.toString("base64"),
         })) as { urls?: Record<string, string> } | null;
         if (response?.urls) {
+          // 直传：云端返回 URL 映射
           for (const h of Object.keys(response.urls)) uploaded.add(h);
           result.assets += Object.keys(response.urls).length;
-        } else if (bytes.length > SyncPusher.CHUNK_BYTES * 4) {
-          // 分块路径：云端拼装上传成功但响应不含 urls 映射（按 hash 记账）
+        } else {
+          // 分块路径：末块响应不含 urls（云端拼装后上传），按 hash 记账
           uploaded.add(ref.hash);
           result.assets += 1;
         }
