@@ -65,15 +65,66 @@ export class SyncPusher {
       signal: AbortSignal.timeout(120000),
     });
     if (response.status === 401) throw Error("同步密钥不正确");
+    if (response.status === 413)
+      throw Error("云端返回 413（单请求超过网关体积限制），请升级客户端后重试");
     if (!response.ok) throw Error(`云端返回 ${response.status}`);
     const result = (await response.json()) as { code?: number; msg?: string };
     if (result.code !== 0) throw Error(result.msg ?? "云端处理失败");
     return result as Record<string, unknown>;
   }
-  private async batch(kind: string, items: PushRow[]) {
-    for (let i = 0; i < items.length; i += 50) {
-      await this.call("/push", { kind, items: items.slice(i, i + 50) });
+  // 网关单请求限制约 100KB，按 48KB/块切分大字段（markdown/图片 base64）
+  private static readonly CHUNK_BYTES = 48 * 1024;
+  private static readonly SAFE_BATCH = 60 * 1024;
+
+  private async sendItem(
+    kind: string,
+    item: PushRow,
+  ): Promise<Record<string, unknown> | null> {
+    if (JSON.stringify(item).length <= SyncPusher.SAFE_BATCH)
+      return this.call("/push", { kind, items: [item] });
+    const bigField =
+      item.data_base64 !== undefined ? "data_base64" : "markdown";
+    const value = String(item[bigField]);
+    const chunkId = `${kind}:${item.id}`;
+    const parts: string[] = [];
+    for (let i = 0; i < value.length; i += SyncPusher.CHUNK_BYTES)
+      parts.push(value.slice(i, i + SyncPusher.CHUNK_BYTES));
+    let last: Record<string, unknown> | null = null;
+    for (let i = 0; i < parts.length; i++) {
+      const row: PushRow = { ...item };
+      delete row[bigField];
+      row.__chunk = {
+        id: chunkId,
+        index: i,
+        total: parts.length,
+        data: parts[i],
+      };
+      last = await this.call("/push", { kind, items: [row] });
     }
+    return last;
+  }
+  private async batch(kind: string, items: PushRow[]) {
+    let buffer: PushRow[] = [];
+    let size = 0;
+    const flush = async () => {
+      if (!buffer.length) return;
+      await this.call("/push", { kind, items: buffer });
+      buffer = [];
+      size = 0;
+    };
+    for (const item of items) {
+      const bytes = JSON.stringify(item).length;
+      if (bytes > SyncPusher.SAFE_BATCH) {
+        await flush();
+        await this.sendItem(kind, item);
+        continue;
+      }
+      if (size + bytes > SyncPusher.SAFE_BATCH || buffer.length >= 50)
+        await flush();
+      buffer.push(item);
+      size += bytes;
+    }
+    await flush();
   }
   async push(): Promise<SyncPushResult> {
     if (!this.settings.endpoint) throw Error("请先配置云端同步地址");
@@ -141,35 +192,29 @@ export class SyncPusher {
         } catch {
           continue;
         }
-        const response = (await this.call("/push", {
-          kind: "assets",
-          items: [
-            {
-              hash: ref.hash,
-              ext: ref.ext,
-              mime_type: assetMime(ref.ext),
-              data_base64: bytes.toString("base64"),
-            },
-          ],
-        })) as { urls?: Record<string, string> };
-        if (response.urls) {
+        const response = (await this.sendItem("assets", {
+          hash: ref.hash,
+          ext: ref.ext,
+          mime_type: assetMime(ref.ext),
+          data_base64: bytes.toString("base64"),
+        })) as { urls?: Record<string, string> } | null;
+        if (response?.urls) {
           for (const h of Object.keys(response.urls)) uploaded.add(h);
           result.assets += Object.keys(response.urls).length;
+        } else if (bytes.length > SyncPusher.CHUNK_BYTES * 4) {
+          // 分块路径：云端拼装上传成功但响应不含 urls 映射（按 hash 记账）
+          uploaded.add(ref.hash);
+          result.assets += 1;
         }
       }
-      await this.call("/push", {
-        kind: "versions",
-        items: [
-          {
-            id: version.id,
-            article_id: article.id,
-            content_hash: version.contentHash,
-            captured_at: version.capturedAt,
-            markdown,
-            completeness: version.completeness,
-            assets: assetRefs,
-          },
-        ],
+      await this.sendItem("versions", {
+        id: version.id,
+        article_id: article.id,
+        content_hash: version.contentHash,
+        captured_at: version.capturedAt,
+        markdown,
+        completeness: version.completeness,
+        assets: assetRefs,
       });
       result.versions += 1;
     }
