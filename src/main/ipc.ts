@@ -31,6 +31,8 @@ import { normalizeUrl } from "./library/files";
 import { searchArticles } from "./library/search";
 import { exportLibrary } from "./backup/export";
 import { inspectBackup, importBackup } from "./backup/merge";
+import { SyncSettingsStore } from "./sync/settings";
+import { SyncPusher } from "./sync/pusher";
 export function registerIpc(
   win: BrowserWindow,
   repo: LibraryRepository,
@@ -337,6 +339,22 @@ export function registerIpc(
     closeInterviews.flush();
     return importBackup(repo, path);
   });
+  const syncSettings = new SyncSettingsStore(repo.root);
+  handle("syncSettings", z.tuple([]), () => ({
+    ...syncSettings.get(),
+    hasToken: syncSettings.hasToken(),
+  }));
+  handle(
+    "saveSyncSettings",
+    z.tuple([text, text.optional()]),
+    (endpoint, token) => syncSettings.save({ endpoint, token }),
+  );
+  handle("syncPush", z.tuple([]), () =>
+    new SyncPusher(repo, {
+      ...syncSettings.get(),
+      token: syncSettings.token(),
+    }).push(),
+  );
   return () => {
     closeInterviews.close();
     vectorIndex.close();

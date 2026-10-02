@@ -81,6 +81,9 @@ const names = [
   "exportBackup",
   "inspectBackup",
   "importBackup",
+  "syncSettings",
+  "saveSyncSettings",
+  "syncPush",
 ];
 contextBridge.exposeInMainWorld(
   "libraryApi",

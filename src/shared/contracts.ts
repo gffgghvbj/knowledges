@@ -25,6 +25,7 @@ import type {
   QaRecord,
   QaScope,
 } from "./knowledge";
+import type { SyncPushResult, SyncSettings } from "./sync";
 export interface Source {
   deletedAt?: string;
   extraction?: ExtractionSelection;
@@ -268,4 +269,7 @@ export interface LibraryApi {
   exportBackup(): Promise<{ cancelled: boolean; path?: string }>;
   inspectBackup(): Promise<{ path: string; preview: BackupPreview } | null>;
   importBackup(path: string): Promise<MergeReport>;
+  syncSettings(): Promise<SyncSettings & { hasToken: boolean }>;
+  saveSyncSettings(endpoint: string, token?: string): Promise<void>;
+  syncPush(): Promise<SyncPushResult>;
 }
