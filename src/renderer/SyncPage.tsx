@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { SyncPushResult } from "../shared/sync";
+import type { ProgressEvent, SyncPushResult } from "../shared/sync";
 import type { Run } from "./App";
 import { api } from "./api";
 
@@ -7,11 +7,15 @@ export function SyncPage({ run, busy }: { run: Run; busy: boolean }) {
   const [endpoint, setEndpoint] = useState(""),
     [token, setToken] = useState(""),
     [hasToken, setHasToken] = useState(false),
-    [result, setResult] = useState<SyncPushResult | null>(null);
+    [result, setResult] = useState<SyncPushResult | null>(null),
+    [progress, setProgress] = useState<ProgressEvent | null>(null);
   useEffect(() => {
     void api.syncSettings().then((s) => {
       setEndpoint(s.endpoint);
       setHasToken(s.hasToken);
+    });
+    return api.onProgress((event) => {
+      if (event.task === "sync") setProgress(event);
     });
   }, []);
   return (
@@ -72,10 +76,31 @@ export function SyncPage({ run, busy }: { run: Run; busy: boolean }) {
           <button
             className="primary"
             disabled={busy}
-            onClick={() => run(async () => setResult(await api.syncPush()))}
+            onClick={() =>
+              run(async () => {
+                setProgress({ task: "sync", label: "准备同步", completed: 0, total: 1 });
+                try {
+                  setResult(await api.syncPush());
+                } finally {
+                  setProgress(null);
+                }
+              })
+            }
           >
             {busy ? "正在同步…" : "开始同步"}
           </button>
+          {busy && progress && (
+            <div className="sync-progress">
+              <progress
+                aria-label="同步进度"
+                max={progress.total || 1}
+                value={progress.total ? progress.completed : undefined}
+              />
+              <small>
+                {progress.label} · {progress.completed} / {progress.total}
+              </small>
+            </div>
+          )}
           {result && (
             <p className="success-text">
               同步完成：来源 {result.sources} · 文章 {result.articles} · 版本{" "}

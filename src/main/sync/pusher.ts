@@ -36,10 +36,13 @@ function canonicalize(markdown: string) {
 export class SyncPusher {
   private state: StateFile = {};
   private requestCount = 0;
+  private readonly onProgress: (label: string, completed: number, total: number) => void;
   constructor(
     private readonly repo: LibraryRepository,
     private readonly settings: SyncSettings & { token?: string },
+    onProgress?: (label: string, completed: number, total: number) => void,
   ) {
+    this.onProgress = onProgress ?? (() => {});
     const path = join(repo.root, "sync-state.json");
     try {
       this.state = JSON.parse(readFileSync(path, "utf8")) as StateFile;
@@ -241,6 +244,8 @@ export class SyncPusher {
       });
       byVersion.set(chunk.versionId, list);
     }
+    this.onProgress("同步向量分块", 0, pendingVersions.length);
+    let chunkDone = 0;
     for (const article of pendingVersions) {
       const chunks = byVersion.get(article.currentVersionId) ?? [];
       // 版本变更：先清掉该文章的旧分块，再写新分块
@@ -260,6 +265,7 @@ export class SyncPusher {
         })),
       );
       chunkVersions[article.currentVersionId] = true;
+      this.onProgress("同步向量分块", ++chunkDone, pendingVersions.length);
     }
     result.chunks = seen.size;
     this.state.chunkVersions = chunkVersions;
@@ -281,6 +287,7 @@ export class SyncPusher {
       finishedAt: "",
     };
     // 1. 来源
+    this.onProgress("同步来源", 0, 1);
     const sources = this.repo.listSources(true);
     await this.batch(
       "sources",
@@ -293,7 +300,9 @@ export class SyncPusher {
       })),
     );
     result.sources = sources.length;
+    this.onProgress("同步来源", 1, 1);
     // 2. 文章元数据（含回收站）
+    this.onProgress("整理文章列表", 0, 1);
     const articles = this.repo.listArticles(true);
     await this.batch(
       "articles",
@@ -309,6 +318,7 @@ export class SyncPusher {
       })),
     );
     result.articles = articles.length;
+    this.onProgress("整理文章列表", 1, 1);
     // 3. 当前版本正文 + 未上传图片：分批（50 篇）+ 4 路并发
     const uploaded = new Set(this.state.uploadedAssets ?? []);
     const jobs: { article: Article; version: ArticleVersion }[] = [];
@@ -345,11 +355,14 @@ export class SyncPusher {
             path: `assets/${ref.hash}.${ref.ext}`,
           });
         }
+      let assetDone = 0;
+      this.onProgress("上传图片", 0, missing.size);
       await this.pool([...missing.values()], async (m) => {
         let bytes: Buffer;
         try {
           bytes = readFileSync(this.repo.resolvePath(m.path));
         } catch {
+          this.onProgress("上传图片", ++assetDone, missing.size);
           return;
         }
         const response = (await this.sendItem("assets", {
@@ -367,8 +380,11 @@ export class SyncPusher {
           uploaded.add(m.hash);
           result.assets += 1;
         }
+        this.onProgress("上传图片", ++assetDone, missing.size);
       });
       // b) 并发推送版本正文
+      let versionDone = 0;
+      this.onProgress("同步正文", 0, slice.length);
       await this.pool(slice, async (job) => {
         await this.sendItem("versions", {
           id: job.version.id,
@@ -380,6 +396,7 @@ export class SyncPusher {
           assets: job.assetRefs,
         });
         result.versions += 1;
+        this.onProgress("同步正文", ++versionDone, slice.length);
       });
       // c) 增量保存进度：中断后图片不重传
       this.state.uploadedAssets = [...uploaded];
@@ -389,6 +406,7 @@ export class SyncPusher {
     // 3.5 语义检索分块 + 向量（桌面版已算好的 Qwen 向量，按版本增量推送）
     await this.pushChunks(articles, result);
     // 4. 题库
+    this.onProgress("同步题库", 0, 1);
     const questions = (
       this.repo.db.prepare("SELECT data FROM interview_questions").all() as {
         data: string;
@@ -406,7 +424,9 @@ export class SyncPusher {
       })),
     );
     result.questions = questions.length;
+    this.onProgress("同步题库", 1, 1);
     // 5. 复习
+    this.onProgress("同步复习记录", 0, 1);
     const reviews = (
       this.repo.db.prepare("SELECT data FROM interview_reviews").all() as {
         data: string;
@@ -433,6 +453,7 @@ export class SyncPusher {
       })),
     );
     result.reviews = reviews.length;
+    this.onProgress("同步复习记录", 1, 1);
     this.state.uploadedAssets = [...uploaded];
     this.state.lastPushedAt = new Date().toISOString();
     result.finishedAt = this.state.lastPushedAt;

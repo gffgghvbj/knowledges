@@ -25,7 +25,7 @@ import type {
   QaRecord,
   QaScope,
 } from "./knowledge";
-import type { SyncPushResult, SyncSettings } from "./sync";
+import type { SyncPushResult, SyncSettings, ProgressEvent } from "./sync";
 export interface Source {
   deletedAt?: string;
   extraction?: ExtractionSelection;
@@ -272,4 +272,5 @@ export interface LibraryApi {
   syncSettings(): Promise<SyncSettings & { hasToken: boolean }>;
   saveSyncSettings(endpoint: string, token?: string): Promise<void>;
   syncPush(): Promise<SyncPushResult>;
+  onProgress(callback: (event: ProgressEvent) => void): () => void;
 }

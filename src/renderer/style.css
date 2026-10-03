@@ -1509,3 +1509,13 @@ button.danger-button:hover {
 .capture-row > button {
   flex-shrink: 0;
 }
+
+.sync-progress {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sync-progress progress {
+  width: 100%;
+}
