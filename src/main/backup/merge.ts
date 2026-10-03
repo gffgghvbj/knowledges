@@ -26,7 +26,9 @@ export async function inspectBackup(path: string): Promise<BackupPreview> {
 export async function importBackup(
   repo: LibraryRepository,
   path: string,
+  onProgress?: (label: string, completed: number, total: number) => void,
 ): Promise<MergeReport> {
+  const progress = onProgress ?? (() => {});
   const backup = await validateBackup(path),
     report: MergeReport = {
       added: 0,
@@ -38,18 +40,28 @@ export async function importBackup(
   try {
     const m = backup.manifest;
     // Validate all existing immutable files before copying any incoming data.
+    let checked = 0;
     for (const f of m.files) {
+      checked += 1;
+      if (checked % 50 === 0 || checked === m.files.length)
+        progress("校验现有文件", checked, m.files.length);
       const target = repo.resolvePath(f.path);
       if (existsSync(target) && hash(readFileSync(target)) !== f.hash)
         throw Error("现有文件与备份冲突，未导入");
     }
-    for (const f of m.files)
+    let copied = 0;
+    for (const f of m.files) {
+      copied += 1;
+      if (copied % 50 === 0 || copied === m.files.length)
+        progress("复制备份文件", copied, m.files.length);
       if (!existsSync(repo.resolvePath(f.path)))
         atomicWrite(
           repo.resolvePath(f.path),
           readFileSync(safePath(backup.root, f.path)),
         );
+    }
     const changedArticles = new Set<string>();
+    progress("合并记录", 0, 1);
     repo.transaction(() => {
       const interviews = new InterviewRepository(repo.db);
       report.interviewsAdded = 0;
@@ -171,10 +183,15 @@ export async function importBackup(
         report.questionsAdded++;
         if (existing) report.questionConflicts++;
       }
+      let indexed = 0;
+      progress("重建检索索引", 0, changedArticles.size);
       for (const id of changedArticles) {
         const article = repo.getArticle(id)!;
         repo.index(article, repo.readArticle(id).markdown);
+        indexed += 1;
+        progress("重建检索索引", indexed, changedArticles.size);
       }
+      progress("合并记录", 1, 1);
     });
     repo.recoverPendingWrites();
     return report;

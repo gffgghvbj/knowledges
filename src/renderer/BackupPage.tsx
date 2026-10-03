@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   LibraryState,
   BackupPreview,
   MergeReport,
 } from "../shared/contracts";
+import type { ProgressEvent } from "../shared/sync";
 import type { Run } from "./App";
 import { api } from "./api";
 export function BackupPage({
@@ -20,7 +21,16 @@ export function BackupPage({
       preview: BackupPreview;
     } | null>(null),
     [report, setReport] = useState<MergeReport | null>(null),
-    [exported, setExported] = useState("");
+    [exported, setExported] = useState(""),
+    [progress, setProgress] = useState<ProgressEvent | null>(null);
+  useEffect(
+    () =>
+      api.onProgress((event) => {
+        if (event.task === "export" || event.task === "import")
+          setProgress(event);
+      }),
+    [],
+  );
   return (
     <>
       <div className="page-heading">
@@ -44,13 +54,35 @@ export function BackupPage({
             disabled={busy}
             onClick={() =>
               run(async () => {
-                const r = await api.exportBackup();
-                if (r.path) setExported(r.path);
+                setProgress({
+                  task: "export",
+                  label: "准备导出",
+                  completed: 0,
+                  total: 1,
+                });
+                try {
+                  const r = await api.exportBackup();
+                  if (r.path) setExported(r.path);
+                } finally {
+                  setProgress(null);
+                }
               })
             }
           >
             {busy ? "正在处理…" : "导出备份包"}
           </button>
+          {busy && progress && progress.task === "export" && (
+            <div className="sync-progress">
+              <progress
+                aria-label="导出进度"
+                max={progress.total || 1}
+                value={progress.total ? progress.completed : undefined}
+              />
+              <small>
+                {progress.label} · {progress.completed} / {progress.total}
+              </small>
+            </div>
+          )}
           {exported && <p className="success-text">已导出：{exported}</p>}
         </section>
         <section className="source-card">
@@ -83,13 +115,35 @@ export function BackupPage({
                 disabled={busy}
                 onClick={() =>
                   run(async () => {
-                    setReport(await api.importBackup(pending.path));
-                    setPending(null);
+                    setProgress({
+                      task: "import",
+                      label: "准备导入",
+                      completed: 0,
+                      total: 1,
+                    });
+                    try {
+                      setReport(await api.importBackup(pending.path));
+                      setPending(null);
+                    } finally {
+                      setProgress(null);
+                    }
                   })
                 }
               >
                 开始合并导入
               </button>
+            </div>
+          )}
+          {busy && progress && progress.task === "import" && (
+            <div className="sync-progress">
+              <progress
+                aria-label="导入进度"
+                max={progress.total || 1}
+                value={progress.total ? progress.completed : undefined}
+              />
+              <small>
+                {progress.label} · {progress.completed} / {progress.total}
+              </small>
             </div>
           )}
           {report && (

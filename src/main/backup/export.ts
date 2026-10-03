@@ -12,7 +12,9 @@ import type { Manifest } from "./manifest";
 export async function exportLibrary(
   repo: LibraryRepository,
   destination: string,
+  onProgress?: (label: string, completed: number, total: number) => void,
 ) {
+  const progress = onProgress ?? (() => {});
   const articles = repo.listArticles(true),
     versions = articles.flatMap((a) => repo.listVersions(a.id)),
     paths = [
@@ -36,8 +38,10 @@ export async function exportLibrary(
     sources: repo.listSources(true),
     articles,
     versions,
-    files: paths.map((path) => {
+    files: paths.map((path, index) => {
       const bytes = readFileSync(repo.resolvePath(path));
+      if (index % 50 === 0 || index + 1 === paths.length)
+        progress("扫描资料文件", index + 1, paths.length);
       return { path, hash: hash(bytes), size: bytes.length };
     }),
   };
@@ -45,7 +49,12 @@ export async function exportLibrary(
     temporary = destination + "." + randomUUID() + ".tmp";
   const completion = pipeline(zip.outputStream, createWriteStream(temporary));
   zip.addBuffer(Buffer.from(JSON.stringify(manifest)), "manifest.json");
-  for (const path of paths) zip.addFile(repo.resolvePath(path), path);
+  paths.forEach((path, index) => {
+    zip.addFile(repo.resolvePath(path), path);
+    if (index % 50 === 0 || index + 1 === paths.length)
+      progress("打包备份", index + 1, paths.length);
+  });
+  progress("写入压缩包", paths.length, paths.length);
   zip.end();
   try {
     await completion;

@@ -31,11 +31,24 @@ import { normalizeUrl } from "./library/files";
 import { searchArticles } from "./library/search";
 import { exportLibrary } from "./backup/export";
 import { inspectBackup, importBackup } from "./backup/merge";
+import { SyncSettingsStore } from "./sync/settings";
+import { SyncPusher } from "./sync/pusher";
 export function registerIpc(
   win: BrowserWindow,
   repo: LibraryRepository,
   queue: CaptureQueue,
 ) {
+  const emitProgress =
+    (task: "sync" | "export" | "import") =>
+    (label: string, completed: number, total: number) => {
+      if (!win.isDestroyed())
+        win.webContents.send("library:progress", {
+          task,
+          label,
+          completed,
+          total,
+        });
+    };
   const id = z.string().min(1).max(128),
     text = z.string().max(4000);
   const approvedImports = new Set<string>();
@@ -317,7 +330,7 @@ export function registerIpc(
     });
     if (result.canceled || !result.filePath) return { cancelled: true };
     closeInterviews.flush();
-    await exportLibrary(repo, result.filePath);
+    await exportLibrary(repo, result.filePath, emitProgress("export"));
     return { cancelled: false, path: result.filePath };
   });
   handle("inspectBackup", z.tuple([]), async () => {
@@ -335,8 +348,25 @@ export function registerIpc(
   handle("importBackup", z.tuple([text]), (path) => {
     if (!approvedImports.has(path)) throw Error("请先选择并检查备份文件");
     closeInterviews.flush();
-    return importBackup(repo, path);
+    return importBackup(repo, path, emitProgress("import"));
   });
+  const syncSettings = new SyncSettingsStore(repo.root);
+  handle("syncSettings", z.tuple([]), () => ({
+    ...syncSettings.get(),
+    hasToken: syncSettings.hasToken(),
+  }));
+  handle(
+    "saveSyncSettings",
+    z.tuple([text, text.optional()]),
+    (endpoint, token) => syncSettings.save({ endpoint, token }),
+  );
+  handle("syncPush", z.tuple([]), () =>
+    new SyncPusher(
+      repo,
+      { ...syncSettings.get(), token: syncSettings.token() },
+      emitProgress("sync"),
+    ).push(),
+  );
   return () => {
     closeInterviews.close();
     vectorIndex.close();

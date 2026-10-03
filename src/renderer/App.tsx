@@ -11,6 +11,7 @@ import { SourcePage } from "./SourcePage";
 import { TaskPage } from "./TaskPage";
 import { LibraryPage } from "./LibraryPage";
 import { BackupPage } from "./BackupPage";
+import { SyncPage } from "./SyncPage";
 import "./style.css";
 const empty: LibraryState = { sources: [], articles: [], tasks: [], root: "" };
 export function App() {
@@ -133,6 +134,7 @@ export function App() {
             ["materials", "▧", "面试资料"],
             ["models", "⚙", "模型设置"],
             ["backup", "⇄", "备份与迁移"],
+            ["sync", "☁", "云同步"],
           ].map(([id, icon, label]) => (
             <button
               key={id}
@@ -175,6 +177,7 @@ export function App() {
                   library: "资料库",
                   tasks: "采集任务",
                   backup: "备份与迁移",
+                  sync: "云同步",
                 } as Record<string, string>
               )[view]
             }
@@ -229,6 +232,7 @@ export function App() {
           {view === "backup" && (
             <BackupPage state={state} run={run} busy={busy} />
           )}
+          {view === "sync" && <SyncPage run={run} busy={busy} />}
         </main>
       </div>
     </div>

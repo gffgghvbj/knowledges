@@ -81,19 +81,40 @@ const names = [
   "exportBackup",
   "inspectBackup",
   "importBackup",
+  "syncSettings",
+  "saveSyncSettings",
+  "syncPush",
 ];
 contextBridge.exposeInMainWorld(
   "libraryApi",
-  Object.fromEntries(
-    names.map((name) => [
-      name,
-      async (...args: unknown[]) => {
-        if (name !== "startupStatus") {
-          const result = await ready;
-          if (result.error) throw Error(result.error);
-        }
-        return ipcRenderer.invoke(`library:${name}`, ...args);
-      },
-    ]),
-  ),
+  {
+    ...Object.fromEntries(
+      names.map((name) => [
+        name,
+        async (...args: unknown[]) => {
+          if (name !== "startupStatus") {
+            const result = await ready;
+            if (result.error) throw Error(result.error);
+          }
+          return ipcRenderer.invoke(`library:${name}`, ...args);
+        },
+      ]),
+    ),
+    onProgress: (callback: (event: unknown) => void) => {
+      let lastEmit = 0;
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        data: unknown,
+      ): void => {
+        const progress = data as { completed: number; total: number };
+        const now = Date.now();
+        if (progress.completed < progress.total && now - lastEmit < 100)
+          return;
+        lastEmit = now;
+        callback(data);
+      };
+      ipcRenderer.on("library:progress", handler);
+      return () => ipcRenderer.removeListener("library:progress", handler);
+    },
+  },
 );
