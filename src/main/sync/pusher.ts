@@ -9,6 +9,7 @@ import type { SyncPushResult, SyncSettings } from "../../shared/sync";
 interface StateFile {
   lastPushedAt?: string;
   uploadedAssets?: string[];
+  chunkVersions?: Record<string, boolean>;
 }
 
 interface PushRow {
@@ -34,6 +35,7 @@ function canonicalize(markdown: string) {
 
 export class SyncPusher {
   private state: StateFile = {};
+  private requestCount = 0;
   constructor(
     private readonly repo: LibraryRepository,
     private readonly settings: SyncSettings & { token?: string },
@@ -51,7 +53,6 @@ export class SyncPusher {
     writeFileSync(tmp, JSON.stringify(this.state, null, 2));
     renameSync(tmp, path);
   }
-  private requestCount = 0;
   private async call(
     path: string,
     body?: unknown,
@@ -73,8 +74,7 @@ export class SyncPusher {
       // 5xx/429 视为可重试；其余 4xx 直接失败
       if (!response.ok && response.status < 500 && response.status !== 429)
         throw Error(`云端返回 ${response.status}`);
-      if (!response.ok)
-        throw Error(`RETRYABLE_${response.status}`);
+      if (!response.ok) throw Error(`RETRYABLE_${response.status}`);
       const result = (await response.json()) as {
         code?: number;
         msg?: string;
@@ -87,9 +87,7 @@ export class SyncPusher {
       const nonRetryable =
         /^(同步密钥|云端返回 4)/.test(message) || message.startsWith("云端处理失败");
       if (attempt < 2 && !nonRetryable) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, 600 * 2 ** attempt),
-        );
+        await new Promise((resolve) => setTimeout(resolve, 600 * 2 ** attempt));
         return this.call(path, body, attempt + 1);
       }
       throw error instanceof Error && message.startsWith("RETRYABLE_")
@@ -128,10 +126,7 @@ export class SyncPusher {
     const chunkKey = String(item.id ?? item.hash ?? "");
     if (!chunkKey) throw Error("分块传输缺少条目标识");
     const chunkId = `${kind}:${chunkKey}`;
-    const parts = SyncPusher.chunkUtf8(
-      serialized,
-      SyncPusher.CHUNK_BYTES,
-    );
+    const parts = SyncPusher.chunkUtf8(serialized, SyncPusher.CHUNK_BYTES);
     let last: Record<string, unknown> | null = null;
     for (let i = 0; i < parts.length; i++) {
       last = await this.call("/push", {
@@ -193,6 +188,83 @@ export class SyncPusher {
     );
     await Promise.all(runners);
   }
+  /**
+   * 推送语义检索分块：桌面版本地向量索引（knowledge_chunks + vector_embeddings，
+   * 归一化 Float32）→ 云端 pgvector 表 article_chunks。按 currentVersionId 增量。
+   */
+  private async pushChunks(articles: Article[], result: SyncPushResult) {
+    const chunkVersions = this.state.chunkVersions ?? {};
+    const pendingVersions = articles.filter(
+      (a) => !chunkVersions[a.currentVersionId],
+    );
+    if (!pendingVersions.length) return;
+    const pendingIds = pendingVersions.map((a) => a.currentVersionId);
+    // 仅取已向量化且属于待同步版本的分块（多 fingerprint 时按 chunk 去重）
+    const placeholders = pendingIds.map(() => "?").join(",");
+    const rows = this.repo.db
+      .prepare(
+        `SELECT c.data AS data, v.vector AS vector
+       FROM knowledge_chunks c
+       JOIN vector_embeddings v ON v.chunk_id = c.id
+       WHERE json_extract(c.data,'$.versionId') IN (${placeholders})`,
+      )
+      .all(...pendingIds) as { data: string; vector: Uint8Array }[];
+    const byVersion = new Map<
+      string,
+      {
+        id: string;
+        articleId: string;
+        title: string;
+        quote: string;
+        vector: Buffer;
+      }[]
+    >();
+    const seen = new Set<string>();
+    for (const row of rows) {
+      const chunk = JSON.parse(row.data) as {
+        id: string;
+        articleId: string;
+        versionId: string;
+        title: string;
+        quote: string;
+      };
+      if (seen.has(chunk.id)) continue;
+      seen.add(chunk.id);
+      const vector = Buffer.from(row.vector as unknown as Uint8Array);
+      const list = byVersion.get(chunk.versionId) ?? [];
+      list.push({
+        id: chunk.id,
+        articleId: chunk.articleId,
+        title: chunk.title ?? "",
+        quote: chunk.quote ?? "",
+        vector,
+      });
+      byVersion.set(chunk.versionId, list);
+    }
+    for (const article of pendingVersions) {
+      const chunks = byVersion.get(article.currentVersionId) ?? [];
+      // 版本变更：先清掉该文章的旧分块，再写新分块
+      await this.call("/push", {
+        kind: "chunks_reset",
+        items: [{ article_id: article.id }],
+      });
+      await this.batch(
+        "chunks",
+        chunks.map((c) => ({
+          id: c.id,
+          article_id: c.articleId,
+          title: c.title,
+          content: c.quote,
+          input_hash: "",
+          vector_b64: c.vector.toString("base64"),
+        })),
+      );
+      chunkVersions[article.currentVersionId] = true;
+    }
+    result.chunks = seen.size;
+    this.state.chunkVersions = chunkVersions;
+    this.saveState();
+  }
   async push(): Promise<SyncPushResult> {
     if (!this.settings.endpoint) throw Error("请先配置云端同步地址");
     if (!this.settings.token) throw Error("请先配置同步密钥");
@@ -204,6 +276,7 @@ export class SyncPusher {
       questions: 0,
       reviews: 0,
       assets: 0,
+      chunks: 0,
       batches: 0,
       finishedAt: "",
     };
@@ -238,10 +311,7 @@ export class SyncPusher {
     result.articles = articles.length;
     // 3. 当前版本正文 + 未上传图片：分批（50 篇）+ 4 路并发
     const uploaded = new Set(this.state.uploadedAssets ?? []);
-    const jobs: {
-      article: Article;
-      version: ArticleVersion;
-    }[] = [];
+    const jobs: { article: Article; version: ArticleVersion }[] = [];
     for (const article of articles) {
       const version = this.repo.getVersion(article.currentVersionId);
       if (version) jobs.push({ article, version });
@@ -253,10 +323,7 @@ export class SyncPusher {
           article,
           version,
           markdown: canonicalize(
-            readFileSync(
-              this.repo.resolvePath(version.markdownPath),
-              "utf8",
-            ),
+            readFileSync(this.repo.resolvePath(version.markdownPath), "utf8"),
           ),
           assetRefs: (version.assets ?? []).map((asset) => {
             const ext =
@@ -292,6 +359,7 @@ export class SyncPusher {
           data_base64: bytes.toString("base64"),
         })) as { urls?: Record<string, string> } | null;
         if (response?.urls) {
+          // 直传：云端返回 URL 映射
           for (const h of Object.keys(response.urls)) uploaded.add(h);
           result.assets += Object.keys(response.urls).length;
         } else {
@@ -318,6 +386,8 @@ export class SyncPusher {
       this.state.lastPushedAt = new Date().toISOString();
       this.saveState();
     }
+    // 3.5 语义检索分块 + 向量（桌面版已算好的 Qwen 向量，按版本增量推送）
+    await this.pushChunks(articles, result);
     // 4. 题库
     const questions = (
       this.repo.db.prepare("SELECT data FROM interview_questions").all() as {
@@ -374,6 +444,7 @@ export class SyncPusher {
 
 function assetMime(ext: string) {
   return (
-    Object.entries(EXT).find(([, e]) => e === ext)?.[0] ?? "application/octet-stream"
+    Object.entries(EXT).find(([, e]) => e === ext)?.[0] ??
+    "application/octet-stream"
   );
 }

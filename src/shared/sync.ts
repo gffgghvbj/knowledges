@@ -9,6 +9,7 @@ export interface SyncPushResult {
   questions: number;
   reviews: number;
   assets: number;
+  chunks: number;
   batches: number;
   finishedAt: string;
 }
