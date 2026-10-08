@@ -18,6 +18,7 @@ export interface SyncPushResult {
   reviews: number;
   assets: number;
   chunks: number;
+  pendingVectors?: number;
   batches: number;
   finishedAt: string;
 }

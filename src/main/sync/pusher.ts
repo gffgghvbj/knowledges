@@ -1,3 +1,5 @@
+import { hash } from "../library/files";
+import { MAX_CONTEXT_CHARS, type Evidence } from "../../shared/knowledge";
 import { readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import type { LibraryRepository } from "../library/repository";
@@ -7,9 +9,11 @@ import type { ReviewItem } from "../../shared/review";
 import type { SyncPushResult, SyncSettings } from "../../shared/sync";
 
 interface StateFile {
+  formatVersion?: number;
+  targetKey?: string;
+  chunkDigests?: Record<string, string>;
   lastPushedAt?: string;
   uploadedAssets?: string[];
-  chunkVersions?: Record<string, boolean>;
 }
 
 interface PushRow {
@@ -36,19 +40,39 @@ function canonicalize(markdown: string) {
 export class SyncPusher {
   private state: StateFile = {};
   private requestCount = 0;
-  private readonly onProgress: (label: string, completed: number, total: number) => void;
+  private readonly onProgress: (
+    label: string,
+    completed: number,
+    total: number,
+  ) => void;
   constructor(
     private readonly repo: LibraryRepository,
-    private readonly settings: SyncSettings & { token?: string },
+    private readonly settings: SyncSettings & {
+      token?: string;
+      embeddingFingerprint?: string;
+    },
     onProgress?: (label: string, completed: number, total: number) => void,
   ) {
     this.onProgress = onProgress ?? (() => {});
+    this.settings = {
+      ...settings,
+      endpoint: settings.endpoint.trim().replace(/\/+$/, ""),
+    };
+    const targetKey = hash(
+      JSON.stringify([this.settings.endpoint, settings.token ?? ""]),
+    );
     const path = join(repo.root, "sync-state.json");
     try {
-      this.state = JSON.parse(readFileSync(path, "utf8")) as StateFile;
+      const saved = JSON.parse(readFileSync(path, "utf8")) as StateFile;
+      this.state =
+        saved?.formatVersion === 2 && saved.targetKey === targetKey
+          ? saved
+          : {};
     } catch {
       this.state = {};
     }
+    this.state.formatVersion = 2;
+    this.state.targetKey = targetKey;
   }
   private saveState() {
     const path = join(this.repo.root, "sync-state.json");
@@ -73,7 +97,9 @@ export class SyncPusher {
       });
       if (response.status === 401) throw Error("同步密钥不正确");
       if (response.status === 413)
-        throw Error("云端返回 413（单请求超过网关体积限制），请升级客户端后重试");
+        throw Error(
+          "云端返回 413（单请求超过网关体积限制），请升级客户端后重试",
+        );
       // 5xx/429 视为可重试；其余 4xx 直接失败
       if (!response.ok && response.status < 500 && response.status !== 429)
         throw Error(`云端返回 ${response.status}`);
@@ -88,7 +114,8 @@ export class SyncPusher {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const nonRetryable =
-        /^(同步密钥|云端返回 4)/.test(message) || message.startsWith("云端处理失败");
+        /^(同步密钥|云端返回 4)/.test(message) ||
+        message.startsWith("云端处理失败");
       if (attempt < 2 && !nonRetryable) {
         await new Promise((resolve) => setTimeout(resolve, 600 * 2 ** attempt));
         return this.call(path, body, attempt + 1);
@@ -193,83 +220,81 @@ export class SyncPusher {
   }
   /**
    * 推送语义检索分块：桌面版本地向量索引（knowledge_chunks + vector_embeddings，
-   * 归一化 Float32）→ 云端 pgvector 表 article_chunks。按 currentVersionId 增量。
+   * 归一化 Float32）→ 云端 pgvector 表 article_chunks。按当前版本、模型和完整向量集合增量。
    */
   private async pushChunks(articles: Article[], result: SyncPushResult) {
-    const chunkVersions = this.state.chunkVersions ?? {};
-    const pendingVersions = articles.filter(
-      (a) => !chunkVersions[a.currentVersionId],
-    );
-    if (!pendingVersions.length) return;
-    const pendingIds = pendingVersions.map((a) => a.currentVersionId);
-    // 仅取已向量化且属于待同步版本的分块（多 fingerprint 时按 chunk 去重）
-    const placeholders = pendingIds.map(() => "?").join(",");
-    const rows = this.repo.db
-      .prepare(
-        `SELECT c.data AS data, v.vector AS vector
-       FROM knowledge_chunks c
-       JOIN vector_embeddings v ON v.chunk_id = c.id
-       WHERE json_extract(c.data,'$.versionId') IN (${placeholders})`,
-      )
-      .all(...pendingIds) as { data: string; vector: Uint8Array }[];
-    const byVersion = new Map<
-      string,
-      {
-        id: string;
-        articleId: string;
-        title: string;
-        quote: string;
-        vector: Buffer;
-      }[]
-    >();
-    const seen = new Set<string>();
-    for (const row of rows) {
-      const chunk = JSON.parse(row.data) as {
-        id: string;
-        articleId: string;
-        versionId: string;
-        title: string;
-        quote: string;
-      };
-      if (seen.has(chunk.id)) continue;
-      seen.add(chunk.id);
-      const vector = Buffer.from(row.vector as unknown as Uint8Array);
-      const list = byVersion.get(chunk.versionId) ?? [];
-      list.push({
-        id: chunk.id,
-        articleId: chunk.articleId,
-        title: chunk.title ?? "",
-        quote: chunk.quote ?? "",
-        vector,
-      });
-      byVersion.set(chunk.versionId, list);
-    }
-    this.onProgress("同步向量分块", 0, pendingVersions.length);
-    let chunkDone = 0;
-    for (const article of pendingVersions) {
-      const chunks = byVersion.get(article.currentVersionId) ?? [];
-      // 版本变更：先清掉该文章的旧分块，再写新分块
-      await this.call("/push", {
-        kind: "chunks_reset",
-        items: [{ article_id: article.id }],
-      });
-      await this.batch(
-        "chunks",
-        chunks.map((c) => ({
-          id: c.id,
-          article_id: c.articleId,
-          title: c.title,
-          content: c.quote,
-          input_hash: "",
-          vector_b64: c.vector.toString("base64"),
-        })),
+    const fingerprint = this.settings.embeddingFingerprint;
+    const digests = this.state.chunkDigests ?? {};
+    const active = articles.filter((a) => !a.deletedAt);
+    this.onProgress("同步向量分块", 0, active.length);
+    let done = 0;
+    for (const article of active) {
+      // Take one local snapshot. A partial index must never replace the cloud's complete index.
+      const rows = this.repo.db
+        .prepare(
+          `
+        SELECT c.data, v.input_hash, v.vector
+        FROM knowledge_chunks c LEFT JOIN vector_embeddings v
+          ON v.chunk_id=c.id AND v.fingerprint=?
+        WHERE c.article_id=? ORDER BY c.id
+      `,
+        )
+        .all(fingerprint ?? "", article.id) as {
+        data: string;
+        input_hash: string | null;
+        vector: Uint8Array | null;
+      }[];
+      const eligible = rows
+        .map((row) => ({ ...row, chunk: JSON.parse(row.data) as Evidence }))
+        .filter(
+          (row) =>
+            row.chunk.versionId === article.currentVersionId &&
+            row.chunk.quote.length <= MAX_CONTEXT_CHARS,
+        );
+      const ready =
+        fingerprint &&
+        eligible.length > 0 &&
+        eligible.every(
+          (row) =>
+            row.vector &&
+            row.vector.byteLength > 0 &&
+            row.vector.byteLength % 4 === 0 &&
+            row.input_hash === hash(row.chunk.title + "\n" + row.chunk.quote),
+        );
+      if (!ready) {
+        result.pendingVectors = (result.pendingVectors ?? 0) + 1;
+        this.onProgress("向量未齐全，留待下次同步", ++done, active.length);
+        continue;
+      }
+      const items = eligible.map((row) => ({
+        id: row.chunk.id,
+        article_id: article.id,
+        title: row.chunk.title,
+        content: row.chunk.quote,
+        input_hash: row.input_hash,
+        vector_b64: Buffer.from(row.vector!).toString("base64"),
+      }));
+      // Key by article, not version: restoring an old version must replace the remote index too.
+      const digest = hash(
+        JSON.stringify([article.currentVersionId, fingerprint, items]),
       );
-      chunkVersions[article.currentVersionId] = true;
-      this.onProgress("同步向量分块", ++chunkDone, pendingVersions.length);
+      if (digests[article.id] !== digest) {
+        // Invalidate before resetting remote data; interrupted replacements must retry.
+        delete digests[article.id];
+        this.state.chunkDigests = digests;
+        this.saveState();
+        await this.call("/push", {
+          kind: "chunks_reset",
+          items: [{ article_id: article.id }],
+        });
+        await this.batch("chunks", items);
+        digests[article.id] = digest;
+        this.state.chunkDigests = digests;
+        this.saveState();
+        result.chunks += items.length;
+      }
+      this.onProgress("同步向量分块", ++done, active.length);
     }
-    result.chunks = seen.size;
-    this.state.chunkVersions = chunkVersions;
-    this.saveState();
   }
   async push(): Promise<SyncPushResult> {
     if (!this.settings.endpoint) throw Error("请先配置云端同步地址");

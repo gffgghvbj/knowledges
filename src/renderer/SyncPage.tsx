@@ -32,7 +32,8 @@ export function SyncPage({ run, busy }: { run: Run; busy: boolean }) {
           <div className="empty-icon">⇡</div>
           <h3>同步设置</h3>
           <p>
-            云端同步地址使用云开发 HTTP 访问服务地址，同步密钥加密保存在本机，不进入备份。
+            云端同步地址使用云开发 HTTP
+            访问服务地址，同步密钥加密保存在本机，不进入备份。
           </p>
           <label className="field">
             <span>同步地址</span>
@@ -47,7 +48,9 @@ export function SyncPage({ run, busy }: { run: Run; busy: boolean }) {
             <input
               value={token}
               onChange={(e) => setToken(e.target.value)}
-              placeholder={hasToken ? "••••••••" : "与云函数环境变量 SYNC_TOKEN 一致"}
+              placeholder={
+                hasToken ? "••••••••" : "与云函数环境变量 SYNC_TOKEN 一致"
+              }
             />
           </label>
           <button
@@ -78,7 +81,12 @@ export function SyncPage({ run, busy }: { run: Run; busy: boolean }) {
             disabled={busy}
             onClick={() =>
               run(async () => {
-                setProgress({ task: "sync", label: "准备同步", completed: 0, total: 1 });
+                setProgress({
+                  task: "sync",
+                  label: "准备同步",
+                  completed: 0,
+                  total: 1,
+                });
                 try {
                   setResult(await api.syncPush());
                 } finally {
@@ -104,8 +112,15 @@ export function SyncPage({ run, busy }: { run: Run; busy: boolean }) {
           {result && (
             <p className="success-text">
               同步完成：来源 {result.sources} · 文章 {result.articles} · 版本{" "}
-              {result.versions} · 图片 {result.assets} · 题目{" "}
-              {result.questions} · 复习 {result.reviews}
+              {result.versions} · 图片 {result.assets} · 题目 {result.questions}{" "}
+              · 复习 {result.reviews} · 向量分块 {result.chunks}
+              {!!result.pendingVectors && (
+                <>
+                  <br />
+                  {result.pendingVectors}{" "}
+                  篇文章的向量尚未齐全，本次已跳过；建立索引完成后再次同步即可补传。
+                </>
+              )}
             </p>
           )}
         </section>
@@ -113,7 +128,8 @@ export function SyncPage({ run, busy }: { run: Run; busy: boolean }) {
       <div className="info-note">
         <b>说明</b>
         <p>
-          同步为单向（桌面 → 云端 → 小程序），小程序端的问答记录不会回传。正文中的图片会上传到云端存储并替换为在线地址。文章删除状态会同步，回收站文章在小程序中不可见。
+          同步为单向（桌面 → 云端 →
+          小程序），小程序端的问答记录不会回传。正文中的图片会上传到云端存储并替换为在线地址。文章删除状态会同步，回收站文章在小程序中不可见。
         </p>
       </div>
     </>

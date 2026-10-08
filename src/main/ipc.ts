@@ -3,7 +3,10 @@ import { extractionSelectionSchema } from "../shared/extraction-schema";
 import { revision } from "./library/revision";
 import type { LibraryState } from "../shared/contracts";
 import { registerInterviewIpc } from "./interview/ipc";
-import { RetrievalSettings } from "./knowledge/retrieval-settings";
+import {
+  RetrievalSettings,
+  embeddingFingerprint,
+} from "./knowledge/retrieval-settings";
 import { VectorIndex } from "./knowledge/vector-index";
 import { HybridRetriever } from "./knowledge/hybrid";
 import { embed, rerank, retrievalError } from "./knowledge/retrieval-api";
@@ -363,7 +366,13 @@ export function registerIpc(
   handle("syncPush", z.tuple([]), () =>
     new SyncPusher(
       repo,
-      { ...syncSettings.get(), token: syncSettings.token() },
+      {
+        ...syncSettings.get(),
+        token: syncSettings.token(),
+        embeddingFingerprint: embeddingFingerprint(
+          retrievalSettings.get().embedding,
+        ),
+      },
       emitProgress("sync"),
     ).push(),
   );
