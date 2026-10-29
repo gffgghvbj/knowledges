@@ -1519,3 +1519,60 @@ button.danger-button:hover {
 .sync-progress progress {
   width: 100%;
 }
+
+.reading-controls {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 8px 0;
+  background: #fff;
+  border-bottom: 1px solid #e4eae5;
+  margin-bottom: 12px;
+}
+body:has(.reader-fullscreen) {
+  overflow: hidden;
+}
+.app-shell:has(.reader-fullscreen) .sidebar,
+.app-shell:has(.reader-fullscreen) .topbar,
+.page:has(.reader-fullscreen) > :not(.library-split),
+.library-split:has(.reader-fullscreen) > .article-list,
+.reader-fullscreen > .version-bar,
+.reader-fullscreen > .reader-meta,
+.reader-fullscreen > .quality-notice,
+.reader-fullscreen > .quality-summary {
+  display: none;
+}
+.library-split:has(.reader-fullscreen) {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: block;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+.reader.reader-fullscreen {
+  height: 100vh;
+  max-height: none;
+  padding: 0 max(24px, calc((100vw - 1100px) / 2)) 48px;
+  background: #fff;
+  overscroll-behavior: contain;
+}
+.reader-fullscreen .reading-controls {
+  top: 0;
+  min-height: 60px;
+  padding: 12px 0;
+}
+.reader-fullscreen .reading-controls strong {
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reader-fullscreen .reading-controls button {
+  flex-shrink: 0;
+}

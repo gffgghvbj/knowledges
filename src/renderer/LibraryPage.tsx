@@ -1,5 +1,5 @@
 import { ExtractionDialog } from "./ExtractionDialog";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   LibraryState,
   Article,
@@ -19,6 +19,46 @@ export function LibraryPage({
   onTask: () => void;
 }) {
   const [recapture, setRecapture] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const readerRef = useRef<HTMLDivElement>(null);
+  const fullscreenButton = useRef<HTMLButtonElement>(null);
+  const readingPosition = useRef(0);
+  const changeFullscreen = (next: boolean) => {
+    readingPosition.current = readerRef.current?.scrollTop ?? 0;
+    setFullscreen(next);
+  };
+  useLayoutEffect(() => {
+    if (readerRef.current)
+      readerRef.current.scrollTop = readingPosition.current;
+    fullscreenButton.current?.focus({ preventScroll: true });
+  }, [fullscreen]);
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        changeFullscreen(false);
+      }
+      if (event.key === "Tab") {
+        const focusable = [
+          ...(readerRef.current?.querySelectorAll<HTMLElement>(
+            'button, a[href], [tabindex="0"]',
+          ) ?? []),
+        ].filter((el) => el.getClientRects().length > 0);
+        const first = focusable[0],
+          last = focusable.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
   const [query, setQuery] = useState(""),
     [trash, setTrash] = useState(false),
     [trashed, setTrashed] = useState<Article[]>([]),
@@ -298,9 +338,26 @@ export function LibraryPage({
             </div>
           )}
         </div>
-        <div className="reader">
+        <div
+          ref={readerRef}
+          className={`reader${fullscreen ? " reader-fullscreen" : ""}`}
+          role={fullscreen ? "dialog" : undefined}
+          aria-modal={fullscreen || undefined}
+          aria-label={fullscreen ? "全屏阅读" : undefined}
+        >
           {value ? (
             <>
+              <div className="reading-controls">
+                {fullscreen && <strong>{value.article.title}</strong>}
+                <button
+                  ref={fullscreenButton}
+                  aria-pressed={fullscreen}
+                  onClick={() => changeFullscreen(!fullscreen)}
+                >
+                  {fullscreen ? "退出全屏" : "全屏阅读"}
+                </button>
+                {fullscreen && <small>Esc 退出</small>}
+              </div>
               <div className="version-bar">
                 {!trash && (
                   <button
